@@ -15,7 +15,6 @@
     td.approved { background: #eaf6ff; color:#1976d2; }
     td.pending { background: #fffde7; color:#bfa100; }
     button { padding:3px 8px; border-radius:5px; border:none; cursor:pointer; font-size:13px;}
-    .approve { background: #4caf50; color:#fff; }
     .reset { background: #dd4b39; color:#fff; }
     .paid { background: #4caf50; color:#fff; }
     .winner { color:#4caf50; font-weight:bold;}
@@ -173,7 +172,6 @@
           <th>Binance Order ID</th>
           <th>Status</th>
           <th>Request</th>
-          <th>Approve</th>
           <th>Mark Used</th>
           <th>Nickname</th>
         </tr>`;
@@ -186,9 +184,6 @@
           <td>${p.trxId || p._trxId}</td>
           <td class="${statusClass}">${status}</td>
           <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
-          <td>
-            ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
-          </td>
           <td>
             <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
           </td>
@@ -239,14 +234,13 @@
           <th>Binance UID</th>
           <th>Time</th>
           <th>Status</th>
-          <th>Approve</th>
           <th>Paid</th>
           <th>Comment</th>
         </tr>`;
       if (winners) {
         Object.entries(winners).sort((a, b) => (b[1].time || 0) - (a[1].time || 0)).forEach(([gameId, w]) => {
           let d = w.time ? (new Date(w.time)).toLocaleString() : '';
-          let statusText = (!w.approved) ? `<span class="pending">Pending</span>` : (w.paid ? `<span class="paid">Paid</span>` : `<span class="pending">Pending</span>`);
+          let statusText = (w.paid ? `<span class="paid">Paid</span>` : `<span class="pending">Pending</span>`);
           // nickname from users
           let nickname = "";
           if (w.winnerName) nickname = w.winnerName;
@@ -260,11 +254,7 @@
             <td>${d}</td>
             <td>${statusText}</td>
             <td>
-              ${!w.approved ? `<button class="approve" onclick="approveWinner('${gameId}', this)">Approve</button>` : ''}
-            </td>
-            <td>
-              ${w.approved && !w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Paid</button>` : ''}
-              ${w.approved && w.paid ? `<button class="reset" onclick="setPending('${gameId}')">Pending</button>` : ''}
+              ${!w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Paid</button>` : `<button class="reset" onclick="setPending('${gameId}')">Pending</button>`}
             </td>
             <td>
               <input class="admin-comment-input" type="text" value="${adminComment}" onchange="saveAdminComment('${gameId}',this.value)" placeholder="Comment">
@@ -351,12 +341,7 @@
       `;
       document.getElementById('dashboard').innerHTML = html;
     }
-    // --- Approve/Used/Winner Actions ---
-    window.approvePlayer = function(uid, trxId) {
-      db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
-        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
-        .catch(err => alert('Error: ' + err.message));
-    };
+    // --- Used/Winner Actions ---
     window.markUsed = function(uid, trxId) {
       if (confirm("Used?")) {
         db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ used: true })
@@ -364,13 +349,8 @@
         .catch(err => alert('Error: ' + err.message));
       }
     };
-    window.approveWinner = function(gameId, btn) {
-      db.ref('winners/' + gameId).update({ approved: true })
-        .then(() => btn && (btn.disabled = true))
-        .catch(err => alert('Error: ' + err.message));
-    };
     window.setPaid = function(gameId) {
-      db.ref('winners/' + gameId).update({ paid: true })
+      db.ref('winners/' + gameId).update({ paid: true, approved: true })
         .catch(err => alert('Error: ' + err.message));
     };
     window.setPending = function(gameId) {
