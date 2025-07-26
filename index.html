@@ -5,38 +5,33 @@
   <title>Ludo Admin Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: "Segoe UI", Arial, sans-serif; background: #f8f9fa; margin: 0; padding: 0; }
-    .wrapper { max-width: 960px; margin: 36px auto 24px auto; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px #0001; padding:32px 16px 24px 16px; }
-    h2 { color: #3c8dbc; text-align: center; margin-bottom: 18px; }
-    table { width:100%; border-collapse:collapse; margin-top:18px;}
-    th, td { border:1px solid #d1d5db; padding:9px 8px; text-align:center; }
-    th { background: #f3f6fa; }
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f8f9fa; margin:0; padding:0; }
+    .wrapper { max-width: 900px; margin: 22px auto 15px auto; background: #fff; border-radius: 14px; box-shadow: 0 2px 20px #0001; padding:20px 6px 14px 6px; }
+    h2 { color:#3c8dbc; text-align:center; margin:10px 0 10px 0; font-size:19px; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td { border:1px solid #d1d5db; padding:6px 4px; text-align:center; font-size:13px; }
+    th { background: #f3f6fa; font-size:13px; }
     td.used { background: #ffeaea; color:#d32f2f; }
     td.approved { background: #eaf6ff; color:#1976d2; }
     td.pending { background: #fffde7; color:#bfa100; }
-    button { padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:15px;}
+    button { padding:3px 8px; border-radius:5px; border:none; cursor:pointer; font-size:13px;}
     .approve { background: #4caf50; color:#fff; }
     .reset { background: #dd4b39; color:#fff; }
     .paid { background: #4caf50; color:#fff; }
-    .pending-btn { background: #bfa100; color:#fff; }
     .winner { color:#4caf50; font-weight:bold;}
-    .small { font-size:13px; color:#888;}
-    #admin-auth {text-align:center;margin:24px 0;}
-    #admin-auth input {padding:7px 8px;font-size:16px;}
-    .dashboard {margin-top:40px; background:#f9f9fc; border-radius:10px; padding:18px 12px;}
-    .dashboard h3 {margin-top:0; color:#1d6fa5;}
-    .refer-block {background:#e2f3e2; border-radius:8px; padding: 8px 10px; margin:20px 0;}
-    .points-actions button {margin:0 4px;}
-    @media (max-width: 700px) {
-      .wrapper { padding: 8px 2px 10px 2px;}
-      table, th, td { font-size: 13px;}
-    }
+    .small { font-size:12px; color:#888;}
+    #admin-auth {text-align:center; margin:20px 0;}
+    #admin-auth input {padding:6px 7px;font-size:14px;}
+    .dashboard {margin-top:24px; background:#f9f9fc; border-radius:8px; padding:10px 7px;}
+    .dashboard h3 {margin:0 0 8px 0; color:#1d6fa5; font-size:16px;}
+    .refer-block {background:#e2f3e2; border-radius:7px; padding: 5px 7px; margin:10px 0;}
+    .points-actions button {margin:0 2px;}
     .timer-cell {color:#1b6c30;}
     .binance-id-copy {
       cursor:pointer;
       background: #f4f9ff;
       border-radius: 4px;
-      padding: 2px 6px;
+      padding: 1px 4px;
       transition: background .2s;
       display:inline-block;
     }
@@ -47,113 +42,46 @@
       background: #d1ffd8 !important;
       color: #156900 !important;
     }
-    .message-panel {
-      max-width: 400px;
-      margin: 0 auto 30px auto;
-      padding: 18px 12px 10px 12px;
-      background: #f7f7f7;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px #0002;
-      text-align: center;
-    }
-    .message-panel input, .message-panel button {
-      font-size: 1rem;
-      padding: 6px 10px;
-      margin-right: 6px;
-      border: 1px solid #b5e7b2;
+    .admin-comment-input {
+      width: 88px;
+      font-size: 12px;
+      border: 1px solid #bbb;
       border-radius: 3px;
+      padding: 2px 3px;
     }
-    .message-panel button {
-      background: #4caf50;
-      color: #fff;
-      border: none;
-    }
-    .message-panel #status {
-      font-size: .95rem;
-      margin-top: 8px;
-      color: #388e3c;
-      height: 1.2em;
-      text-align: center;
+    @media (max-width: 700px) {
+      .wrapper { padding: 3px 1px 5px 1px;}
+      table, th, td { font-size: 12px;}
+      .admin-comment-input { width: 55px; }
     }
   </style>
 </head>
 <body>
   <div class="wrapper">
-    <!-- Global Message Sender Panel -->
-    <div class="message-panel" id="global-message-panel" style="display:none;">
-      <div>
-        <input id="msg" placeholder="মেসেজ" autocomplete="off">
-        <button id="send">Send</button>
-      </div>
-      <div id="status"></div>
-    </div>
-    <!-- End Message Sender -->
     <h2>Pending Players</h2>
     <div id="admin-auth" style="display:none;">
-      <input type="email" id="adminEmail" placeholder="Admin Email">
+      <input type="email" id="adminEmail" placeholder="Email">
       <input type="password" id="adminPass" placeholder="Password">
       <button onclick="adminLogin()">Log In</button>
-      <div id="authMsg" style="color:#b71c1c;margin-top:7px;"></div>
+      <div id="authMsg" style="color:#b71c1c;margin-top:6px;font-size:13px;"></div>
     </div>
     <div id="pendingTable"></div>
-    <h2 style="margin-top:32px;">Winners (Approve & Paid)</h2>
+    <h2 style="margin-top:18px;">Winners & Ready Players</h2>
     <div id="winnersTable"></div>
-    <h2 style="margin-top:32px;">All Users & Points</h2>
+    <h2 style="margin-top:18px;">All Players & Points</h2>
     <div id="usersTable"></div>
     <div class="dashboard" id="dashboard"></div>
-    <div style="margin-top:40px; color:#b71c1c; text-align:center;">
-      <b>Security Note:</b> Restrict access to this page in production.<br>
-      Secure your Firebase database rules to allow only admin writes/reads.
+    <div style="margin-top:22px;color:#b71c1c;text-align:center; font-size:12px;">
+      <b>নোট:</b> এই পেজ প্রোডাকশনে রক্ষা করুন।<br>
+      Firebase ডাটাবেস রুলস শুধুমাত্র এডমিন রিড/রাইট দিবেন।
     </div>
   </div>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <!-- Global Message Sender Script (latest modular SDK for this part only) -->
-  <script type="module">
-    import { initializeApp as newInitializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
-    // Use the same config as compat
-    const app = newInitializeApp({
-      apiKey: "AIzaSyDLhqeEYZmHHjYB1TtyZndsQk2wUfIW37k",
-      authDomain: "friend-dice-pay.firebaseapp.com",
-      databaseURL: "https://friend-dice-pay-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "friend-dice-pay",
-      storageBucket: "friend-dice-pay.appspot.com",
-      messagingSenderId: "1079545705926",
-      appId: "1:1079545705926:web:af3f21bfbad5f866b52ec7",
-      measurementId: "G-EJNMR0CRCG"
-    });
-    const db = getDatabase(app);
-    window.addEventListener('admin-auth-checked', e => {
-      document.getElementById('global-message-panel').style.display = e.detail.isAdmin ? '' : 'none';
-    });
-    document.getElementById('send').onclick = async function() {
-      const msg = document.getElementById('msg').value.trim();
-      const status = document.getElementById('status');
-      if (!msg) {
-        status.textContent = "মেসেজ দিন!";
-        status.style.color = "red";
-        return;
-      }
-      try {
-        await set(ref(db, 'site_global_notification'), {
-          message: msg,
-          timestamp: Date.now()
-        });
-        status.textContent = "পাঠানো হয়েছে!";
-        status.style.color = "#388e3c";
-        document.getElementById('msg').value = '';
-        setTimeout(() => status.textContent = "", 1200);
-      } catch (e) {
-        status.textContent = "সমস্যা!";
-        status.style.color = "red";
-      }
-    };
-  </script>
-  <!-- Main Admin Panel Script -->
   <script>
+    // === CONFIG ===
     const firebaseConfig = {
       apiKey: "AIzaSyDLhqeEYZmHHjYB1TtyZndsQk2wUfIW37k",
       authDomain: "friend-dice-pay.firebaseapp.com",
@@ -161,16 +89,19 @@
       projectId: "friend-dice-pay",
       storageBucket: "friend-dice-pay.appspot.com",
       messagingSenderId: "1079545705926",
-      appId: "1:1079545705926:web:af3f21bfbad5f866b52ec7",
-      measurementId: "G-EJNMR0CRCG"
+      appId: "1:1079545705926:web:af3f21bfbad5f866b52ec7"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63";
     let isAdmin = false;
+    let usersMap = {};
+    let winnerAdminComments = {};
+
+    // === AUTH ===
     document.getElementById('pendingTable').innerHTML = `
-      <div style="text-align:center;margin:20px 0 0 0;font-size:19px;">
-        Checking admin authentication...
+      <div style="text-align:center;margin:15px 0 0 0;font-size:15px;">
+        Checking authentication...
       </div>
     `;
     firebase.auth().onAuthStateChanged(function(user) {
@@ -180,23 +111,26 @@
         loadAdminData();
       } else {
         isAdmin = false;
-        document.getElementById('pendingTable').innerHTML = '';
-        document.getElementById('winnersTable').innerHTML = '';
-        document.getElementById('usersTable').innerHTML = '';
-        document.getElementById('dashboard').innerHTML = '';
+        clearTables();
         document.getElementById('admin-auth').style.display = "";
       }
-      window.dispatchEvent(new CustomEvent('admin-auth-checked', { detail: { isAdmin } }));
     });
     function adminLogin() {
       const email = document.getElementById('adminEmail').value.trim();
       const pass = document.getElementById('adminPass').value.trim();
       document.getElementById('authMsg').textContent = '';
-      firebase.auth().signInWithEmailAndPassword(email, pass)
-      .catch(err=>{
+      firebase.auth().signInWithEmailAndPassword(email, pass).catch(err=>{
         document.getElementById('authMsg').textContent = err.message;
       });
     }
+    function clearTables() {
+      document.getElementById('pendingTable').innerHTML = '';
+      document.getElementById('winnersTable').innerHTML = '';
+      document.getElementById('usersTable').innerHTML = '';
+      document.getElementById('dashboard').innerHTML = '';
+    }
+
+    // === ADMIN DATA LOAD ===
     function loadAdminData() {
       fetchAllPendingPlayers(renderPendingPlayers);
       db.ref('winners').on('value', snap => {
@@ -205,41 +139,43 @@
       });
       db.ref('users').on('value', snap => {
         const users = snap.val() || {};
+        usersMap = users;
         renderUsersTable(users);
         renderDashboard(users);
       });
       setInterval(() => fetchAllPendingPlayers(renderPendingPlayers), 10000);
     }
+    // --- Pending Players Table ---
+    let pendingTimersInterval = null, pendingPlayersList = {};
     function fetchAllPendingPlayers(renderCb) {
       db.ref('users').once('value').then(snap => {
         let allPlayers = {};
         snap.forEach(userSnap => {
           const uid = userSnap.key;
+          const userData = userSnap.val();
           const pendingPlayers = userSnap.child('pendingPlayers').val() || {};
           for (const trxId in pendingPlayers) {
             allPlayers[uid + '___' + trxId] = {
               ...pendingPlayers[trxId],
               _uid: uid,
-              _trxId: trxId
+              _trxId: trxId,
+              _playerName: userData && userData.playerName ? userData.playerName : (pendingPlayers[trxId].playerName || "Unknown")
             };
           }
         });
         renderCb(allPlayers);
       });
     }
-    // Pending Players WITHOUT Binance ID
-    let pendingTimersInterval = null;
-    let pendingPlayersList = {};
     function renderPendingPlayers(players) {
       pendingPlayersList = players;
       let html = `<table>
         <tr>
-          <th>Trx ID</th>
+          <th>Binance Order ID</th>
           <th>Status</th>
-          <th>Request Time</th>
+          <th>Request</th>
           <th>Approve</th>
           <th>Mark Used</th>
-          <th>User UID</th>
+          <th>Nickname</th>
         </tr>`;
       for (const key in players) {
         const p = players[key];
@@ -251,12 +187,12 @@
           <td class="${statusClass}">${status}</td>
           <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
           <td>
-            ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')">Approve</button>` : ''}
+            ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
           </td>
           <td>
-            <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Mark Used</button>
+            <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
           </td>
-          <td class="small">${p._uid}</td>
+          <td class="small">${p._playerName || ""}</td>
         </tr>`;
       }
       html += `</table>`;
@@ -284,9 +220,9 @@
             let minutes = Math.floor(diff / (60 * 1000)) % 60;
             let hours = Math.floor(diff / (60 * 60 * 1000));
             let timeStr = "";
-            if (hours > 0) timeStr += hours + " ঘণ্টা ";
-            if (minutes > 0 || hours > 0) timeStr += minutes + " মিনিট ";
-            timeStr += seconds + " সেকেন্ড আগে";
+            if (hours > 0) timeStr += hours + "ঘ ";
+            if (minutes > 0 || hours > 0) timeStr += minutes + "মি ";
+            timeStr += seconds + "সেকেন্ড";
             cell.textContent = timeStr;
           } else {
             cell.textContent = "Unknown";
@@ -294,60 +230,56 @@
         }
       }
     }
-    // Winners WITH Binance ID
+    // --- Winner Table ---
     function renderWinners(winners) {
       let html = `<table>
         <tr>
-          <th>Game ID</th>
-          <th>Trx ID</th>
-          <th>Binance ID</th>
+          <th>Player Status</th>
+          <th>Binance Order ID</th>
+          <th>Binance UID</th>
           <th>Time</th>
           <th>Status</th>
           <th>Approve</th>
-          <th>Set Paid</th>
-          <th>Set Pending</th>
+          <th>Paid</th>
+          <th>Comment</th>
         </tr>`;
       if (winners) {
         Object.entries(winners).sort((a, b) => (b[1].time || 0) - (a[1].time || 0)).forEach(([gameId, w]) => {
           let d = w.time ? (new Date(w.time)).toLocaleString() : '';
-          let statusText = "";
-          if (!w.approved) statusText = `<span class="pending">Pending</span>`;
-          else statusText = w.paid ? `<span class="paid">Paid</span>` : `<span class="pending">Pending</span>`;
-          // Binance ID show with copy
-          let binanceCell = '';
-          if (w.binanceId) {
-            binanceCell = `<span class="binance-id-copy" data-binance="${w.binanceId}" title="Click to copy">${w.binanceId}</span>`;
-          } else {
-            binanceCell = `<span style="color:#bbb;">—</span>`;
-          }
+          let statusText = (!w.approved) ? `<span class="pending">Pending</span>` : (w.paid ? `<span class="paid">Paid</span>` : `<span class="pending">Pending</span>`);
+          // nickname from users
+          let nickname = "";
+          if (w.winnerName) nickname = w.winnerName;
+          else if (usersMap[w.uid] && usersMap[w.uid].playerName) nickname = usersMap[w.uid].playerName;
+          let binanceCell = w.binanceId ? `<span class="binance-id-copy" data-binance="${w.binanceId}" title="Copy">${w.binanceId}</span>` : `<span style="color:#bbb;">—</span>`;
+          let adminComment = w.adminComment || "";
           html += `<tr>
-            <td>${gameId}</td>
+            <td>${nickname || "-"}</td>
             <td>${w.trxId || ""}</td>
             <td>${binanceCell}</td>
             <td>${d}</td>
             <td>${statusText}</td>
             <td>
-              ${!w.approved ? `<button class="approve" onclick="approveWinner('${gameId}')">Approve</button>` : ''}
+              ${!w.approved ? `<button class="approve" onclick="approveWinner('${gameId}', this)">Approve</button>` : ''}
             </td>
             <td>
-              ${w.approved && !w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Set Paid</button>` : ''}
+              ${w.approved && !w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Paid</button>` : ''}
+              ${w.approved && w.paid ? `<button class="reset" onclick="setPending('${gameId}')">Pending</button>` : ''}
             </td>
             <td>
-              ${w.approved && w.paid ? `<button class="pending-btn" onclick="setPending('${gameId}')">Set Pending</button>` : ''}
+              <input class="admin-comment-input" type="text" value="${adminComment}" onchange="saveAdminComment('${gameId}',this.value)" placeholder="Comment">
             </td>
           </tr>`;
         });
       }
       html += `</table>`;
       document.getElementById('winnersTable').innerHTML = html;
-      // Attach copy-to-clipboard for binanceId
       setTimeout(() => {
         document.querySelectorAll('.binance-id-copy').forEach(el => {
           el.onclick = function() {
             const binanceId = this.getAttribute('data-binance');
-            if (navigator.clipboard) {
-              navigator.clipboard.writeText(binanceId);
-            } else {
+            if (navigator.clipboard) navigator.clipboard.writeText(binanceId);
+            else {
               let tmp = document.createElement('input');
               tmp.value = binanceId;
               document.body.appendChild(tmp);
@@ -360,30 +292,28 @@
             setTimeout(() => {
               this.classList.remove('copied');
               this.innerText = binanceId;
-            }, 1200);
+            }, 900);
           };
         });
       }, 200);
     }
+    // --- Users/Points Table ---
     function renderUsersTable(users) {
       let html = `<table>
         <tr>
-          <th>UID</th>
+          <th>Nickname</th>
           <th>Refer Code</th>
-          <th>Refer Link</th>
-          <th>Referred Users</th>
-          <th>Approved Referrals</th>
+          <th>Referred</th>
+          <th>Approved</th>
           <th>Points</th>
         </tr>`;
       for(const uid in users) {
         const u = users[uid];
-        const referLink = location.origin + "/signup?ref=" + (u.referCode || uid);
         const referredCount = u.referredUsers ? Object.keys(u.referredUsers).length : 0;
         const approvedCount = u.approvedReferrals ? Object.keys(u.approvedReferrals).length : 0;
         html += `<tr>
-          <td class="small">${uid}</td>
+          <td class="small">${u.playerName || "-"}</td>
           <td>${u.referCode || uid}</td>
-          <td><input style="width:180px;font-size:12px" value="${referLink}" readonly></td>
           <td>${referredCount}</td>
           <td>${approvedCount}</td>
           <td>${u.points || 0}</td>
@@ -392,6 +322,7 @@
       html += `</table>`;
       document.getElementById('usersTable').innerHTML = html;
     }
+    // --- Dashboard Info ---
     function renderDashboard(users) {
       let totalPlayers = Object.keys(users).length;
       let totalApproved = 0, totalPoints = 0, topRef = [];
@@ -407,77 +338,48 @@
         const refCount = u.approvedReferrals ? Object.keys(u.approvedReferrals).length : 0;
         if(refCount > maxRef) {
           maxRef = refCount;
-          topRef = [uid];
+          topRef = [u.playerName || uid];
         } else if(refCount > 0 && refCount === maxRef) {
-          topRef.push(uid);
+          topRef.push(u.playerName || uid);
         }
       }
-      let html = `<h3>Dashboard</h3>
-        <div>মোট প্লেয়ার: <b>${totalPlayers}</b></div>
-        <div>মোট Approve হয়েছে: <b>${totalApproved}</b></div>
-        <div>মোট রেফার কমিশন (পয়েন্ট): <b>${totalPoints}</b></div>
-        <div>সর্বোচ্চ রেফারার: <b>${topRef.join(', ')||'N/A'}</b> (${maxRef} জন Approve)</div>
+      let html = `<h3>ড্যাশবোর্ড</h3>
+        <div>মোট: <b>${totalPlayers}</b></div>
+        <div>Approve: <b>${totalApproved}</b></div>
+        <div>Commission: <b>${totalPoints}</b></div>
+        <div>Top Ref: <b>${topRef.join(', ')||'N/A'}</b> (${maxRef})</div>
       `;
       document.getElementById('dashboard').innerHTML = html;
     }
+    // --- Approve/Used/Winner Actions ---
     window.approvePlayer = function(uid, trxId) {
-      if (confirm("Approve this player?")) {
-        db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
-        .then(() => {
-          db.ref('users/' + uid).once('value').then(snap => {
-            const user = snap.val();
-            if (user && user.referredBy) {
-              db.ref('users').orderByChild('referCode').equalTo(user.referredBy).once('value', snap2 => {
-                snap2.forEach(refUserSnap => {
-                  const refUid = refUserSnap.key;
-                  db.ref('users/' + refUid + '/points').transaction(points => (points || 0) + 2);
-                  db.ref('users/' + refUid + '/approvedReferrals/' + uid).set(true);
-                });
-              });
-            }
-            alert('Player approved!');
-            fetchAllPendingPlayers(renderPendingPlayers);
-          });
-        })
+      db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
+        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
         .catch(err => alert('Error: ' + err.message));
-      }
     };
     window.markUsed = function(uid, trxId) {
-      if (confirm("Mark this transaction as used?")) {
+      if (confirm("Used?")) {
         db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ used: true })
-        .then(() => {
-          alert('Marked as used!');
-          fetchAllPendingPlayers(renderPendingPlayers);
-        })
+        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
         .catch(err => alert('Error: ' + err.message));
       }
     };
-    window.approveWinner = function(gameId) {
-      if (confirm("Approve this winner?")) {
-        db.ref('winners/' + gameId).update({ approved: true })
-        .then(() => alert('Winner approved!'))
+    window.approveWinner = function(gameId, btn) {
+      db.ref('winners/' + gameId).update({ approved: true })
+        .then(() => btn && (btn.disabled = true))
         .catch(err => alert('Error: ' + err.message));
-      }
     };
     window.setPaid = function(gameId) {
-      if (confirm("Mark this winner as PAID?")) {
-        db.ref('winners/' + gameId).update({ paid: true })
-        .then(() => alert('Winner marked as PAID.'))
+      db.ref('winners/' + gameId).update({ paid: true })
         .catch(err => alert('Error: ' + err.message));
-      }
     };
     window.setPending = function(gameId) {
-      if (confirm("Mark this winner as PENDING (not paid)?")) {
-        db.ref('winners/' + gameId).update({ paid: false })
-        .then(() => alert('Winner marked as PENDING.'))
+      db.ref('winners/' + gameId).update({ paid: false })
         .catch(err => alert('Error: ' + err.message));
-      }
+    };
+    window.saveAdminComment = function(gameId, value) {
+      db.ref('winners/' + gameId).update({ adminComment: value });
     };
   </script>
 </body>
 </html>
-
-
-
-
- 
