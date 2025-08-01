@@ -49,6 +49,17 @@
       border-radius: 3px;
       padding: 2px 3px;
     }
+    .delete-btn {
+      background: #ff5252;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 3px 9px;
+      cursor: pointer;
+    }
+    .delete-btn:hover {
+      background: #c62828;
+    }
     @media (max-width: 700px) {
       .wrapper { padding: 3px 1px 5px 1px;}
       table, th, td { font-size: 12px;}
@@ -230,6 +241,7 @@
         }
       }
     }
+
     // --- Winner Table ---
     function renderWinners(winners) {
       let html = `<table>
@@ -240,7 +252,7 @@
           <th>Time</th>
           <th>Status</th>
           <th>Paid</th>
-          <th>Comment</th>
+          <th>Delete</th>
         </tr>`;
       if (winners) {
         Object.entries(winners).sort((a, b) => (b[1].time || 0) - (a[1].time || 0)).forEach(([gameId, w]) => {
@@ -251,7 +263,6 @@
           if (w.winnerName) nickname = w.winnerName;
           else if (usersMap[w.uid] && usersMap[w.uid].playerName) nickname = usersMap[w.uid].playerName;
           let binanceCell = w.binanceId ? `<span class="binance-id-copy" data-binance="${w.binanceId}" title="Copy">${w.binanceId}</span>` : `<span style="color:#bbb;">—</span>`;
-          let adminComment = w.adminComment || "";
           html += `<tr>
             <td>${nickname || "-"}</td>
             <td>${w.trxId || ""}</td>
@@ -262,7 +273,7 @@
               ${!w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Paid</button>` : `<button class="reset" onclick="setPending('${gameId}')">Pending</button>`}
             </td>
             <td>
-              <input class="admin-comment-input" type="text" value="${adminComment}" onchange="saveAdminComment('${gameId}',this.value)" placeholder="Comment">
+              <button class="delete-btn" onclick="deleteWinner('${gameId}')">Delete</button>
             </td>
           </tr>`;
         });
@@ -301,6 +312,7 @@
           <th>Referred</th>
           <th>Approved</th>
           <th>Points</th>
+          <th>Delete</th>
         </tr>`;
       for(const uid in users) {
         const u = users[uid];
@@ -312,6 +324,9 @@
           <td>${referredCount}</td>
           <td>${approvedCount}</td>
           <td>${u.points || 0}</td>
+          <td>
+            <button class="delete-btn" onclick="deleteUser('${uid}')">Delete</button>
+          </td>
         </tr>`;
       }
       html += `</table>`;
@@ -367,8 +382,19 @@
       db.ref('winners/' + gameId).update({ paid: false })
         .catch(err => alert('Error: ' + err.message));
     };
-    window.saveAdminComment = function(gameId, value) {
-      db.ref('winners/' + gameId).update({ adminComment: value });
+
+    // --- Delete Actions ---
+    window.deleteWinner = function(gameId) {
+      if (confirm("Are you sure you want to delete this winner?")) {
+        db.ref('winners/' + gameId).remove()
+          .catch(err => alert('Error: ' + err.message));
+      }
+    };
+    window.deleteUser = function(uid) {
+      if (confirm("Are you sure you want to delete this user?")) {
+        db.ref('users/' + uid).remove()
+          .catch(err => alert('Error: ' + err.message));
+      }
     };
   </script>
 </body>
