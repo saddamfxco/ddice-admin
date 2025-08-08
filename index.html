@@ -350,7 +350,7 @@
       const token = snap.val();
       if(!token) return alert("User has not enabled notifications");
       // Backend API call করে FCM Push পাঠান (আপনার backend endpoint বসান)
-      fetch('https://your-server.com/send-fcm', {
+      fetch('http://localhost:3000/send-fcm', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ token, msg })
