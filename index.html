@@ -401,6 +401,34 @@
           .catch(err => alert('Error: ' + err.message));
       }
     };
+
+
+
+window.sendNotificationToUser = async function(uid) {
+  const msg = document.getElementById('notif-msg-' + uid).value.trim();
+  if(!msg) return alert("Message required");
+  // User DB থেকে Token পড়ুন
+  const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
+  const token = snap.val();
+  if(!token) return alert("User has not enabled notifications");
+
+  // Backend API call করে FCM Push পাঠান (Firebase Client JS থেকে সরাসরি FCM Push করা যায় না)
+  // তাই AJAX দিয়ে আপনার server-এ POST করুন, server থেকে FCM push করুন
+  fetch('https://your-server.com/send-fcm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ token, msg })
+  }).then(res => res.json()).then(data => {
+    if(data.success) alert("Notification sent!");
+    else alert("Failed to send: " + data.error);
+  });
+};
+
+
+
+
+
+    
   </script>
 </body>
 </html>
