@@ -177,38 +177,59 @@
         renderCb(allPlayers);
       });
     }
+
+
+
+
+
+
+
+
+
+    
     function renderPendingPlayers(players) {
-      pendingPlayersList = players;
-      let html = `<table>
-        <tr>
-          <th>Binance Order ID</th>
-          <th>Status</th>
-          <th>Request</th>
-          <th>Approve</th>
-          <th>Mark Used</th>
-          <th>Nickname</th>
-        </tr>`;
-      for (const key in players) {
-        const p = players[key];
-        if (p.used) continue;
-        let status = p.approved ? 'Approved' : 'Pending';
-        let statusClass = p.approved ? 'approved' : 'pending';
-        html += `<tr>
-          <td>${p.trxId || p._trxId}</td>
-          <td class="${statusClass}">${status}</td>
-          <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
-          <td>
-            ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
-          </td>
-          <td>
-            <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
-          </td>
-          <td class="small">${p._playerName || ""}</td>
-        </tr>`;
-      }
-      html += `</table>`;
-      document.getElementById('pendingTable').innerHTML = html;
-      startPendingTimers();
+  pendingPlayersList = players;
+  let html = `<table>
+    <tr>
+      <th>Binance Order ID</th>
+      <th>Status</th>
+      <th>Request</th>
+      <th>Approve</th>
+      <th>Mark Used</th>
+      <th>Nickname</th>
+      <th>Send Notification</th> <!-- নতুন কলাম -->
+    </tr>`;
+  for (const key in players) {
+    const p = players[key];
+    if (p.used) continue;
+    let status = p.approved ? 'Approved' : 'Pending';
+    let statusClass = p.approved ? 'approved' : 'pending';
+    html += `<tr>
+      <td>${p.trxId || p._trxId}</td>
+      <td class="${statusClass}">${status}</td>
+      <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
+      <td>
+        ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
+      </td>
+      <td>
+        <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
+      </td>
+      <td class="small">${p._playerName || ""}</td>
+      <td>
+        <input type="text" id="notif-msg-${p._uid}-${p._trxId}" placeholder="Type notification...">
+        <button onclick="sendNotificationToUser('${p._uid}','${p._trxId}')">Send</button>
+      </td>
+    </tr>`;
+  }
+  html += `</table>`;
+  document.getElementById('pendingTable').innerHTML = html;
+  startPendingTimers();
+}
+
+
+
+
+      
     }
     function startPendingTimers() {
       if (pendingTimersInterval) clearInterval(pendingTimersInterval);
