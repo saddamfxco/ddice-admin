@@ -20,50 +20,17 @@
     .paid { background: #4caf50; color:#fff;}
     .winner { color:#4caf50; font-weight:bold;}
     .small { font-size:12px; color:#888;}
+    .msg-input { width: 100px; font-size:12px; border:1px solid #bbb; border-radius:3px; padding:2px 3px; margin-right:3px;}
+    .msg-btn { background:#1976d2; color:#fff;}
+    .msg-btn:disabled {background:#aaa; color:#fff; cursor:not-allowed;}
     #admin-auth {text-align:center; margin:20px 0;}
     #admin-auth input {padding:6px 7px;font-size:14px;}
     .dashboard {margin-top:24px; background:#f9f9fc; border-radius:8px; padding:10px 7px;}
     .dashboard h3 {margin:0 0 8px 0; color:#1d6fa5; font-size:16px;}
-    .refer-block {background:#e2f3e2; border-radius:7px; padding: 5px 7px; margin:10px 0;}
-    .points-actions button {margin:0 2px;}
-    .timer-cell {color:#1b6c30;}
-    .binance-id-copy {
-      cursor:pointer;
-      background: #f4f9ff;
-      border-radius: 4px;
-      padding: 1px 4px;
-      transition: background .2s;
-      display:inline-block;
-    }
-    .binance-id-copy:hover {
-      background: #cce6ff;
-    }
-    .binance-id-copy.copied {
-      background: #d1ffd8 !important;
-      color: #156900 !important;
-    }
-    .admin-comment-input {
-      width: 88px;
-      font-size: 12px;
-      border: 1px solid #bbb;
-      border-radius: 3px;
-      padding: 2px 3px;
-    }
-    .delete-btn {
-      background: #ff5252;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      padding: 3px 9px;
-      cursor: pointer;
-    }
-    .delete-btn:hover {
-      background: #c62828;
-    }
     @media (max-width: 700px) {
       .wrapper { padding: 3px 1px 5px 1px;}
       table, th, td { font-size: 12px;}
-      .admin-comment-input { width: 55px; }
+      .msg-input { width: 60px; }
     }
   </style>
 </head>
@@ -107,7 +74,6 @@
     const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63";
     let isAdmin = false;
     let usersMap = {};
-    let winnerAdminComments = {};
 
     // === AUTH ===
     document.getElementById('pendingTable').innerHTML = `
@@ -141,7 +107,7 @@
       document.getElementById('dashboard').innerHTML = '';
     }
 
-    // === ADMIN DATA LOAD ===
+    // --- Admin Data Load ---
     function loadAdminData() {
       fetchAllPendingPlayers(renderPendingPlayers);
       db.ref('winners').on('value', snap => {
@@ -156,8 +122,9 @@
       });
       setInterval(() => fetchAllPendingPlayers(renderPendingPlayers), 10000);
     }
+
     // --- Pending Players Table ---
-    let pendingTimersInterval = null, pendingPlayersList = {};
+    let pendingPlayersList = {};
     function fetchAllPendingPlayers(renderCb) {
       db.ref('users').once('value').then(snap => {
         let allPlayers = {};
@@ -177,93 +144,49 @@
         renderCb(allPlayers);
       });
     }
-
-
-
-
-
-
-
-
-
-    
     function renderPendingPlayers(players) {
-  pendingPlayersList = players;
-  let html = `<table>
-    <tr>
-      <th>Binance Order ID</th>
-      <th>Status</th>
-      <th>Request</th>
-      <th>Approve</th>
-      <th>Mark Used</th>
-      <th>Nickname</th>
-      <th>Send Notification</th> <!-- নতুন কলাম -->
-    </tr>`;
-  for (const key in players) {
-    const p = players[key];
-    if (p.used) continue;
-    let status = p.approved ? 'Approved' : 'Pending';
-    let statusClass = p.approved ? 'approved' : 'pending';
-    html += `<tr>
-      <td>${p.trxId || p._trxId}</td>
-      <td class="${statusClass}">${status}</td>
-      <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
-      <td>
-        ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
-      </td>
-      <td>
-        <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
-      </td>
-      <td class="small">${p._playerName || ""}</td>
-      <td>
-        <input type="text" id="notif-msg-${p._uid}-${p._trxId}" placeholder="Type notification...">
-        <button onclick="sendNotificationToUser('${p._uid}','${p._trxId}')">Send</button>
-      </td>
-    </tr>`;
-  }
-  html += `</table>`;
-  document.getElementById('pendingTable').innerHTML = html;
-  startPendingTimers();
-}
-
-
-
-
-      
+      pendingPlayersList = players;
+      let html = `<table>
+        <tr>
+          <th>Binance Order ID</th>
+          <th>Status</th>
+          <th>Request</th>
+          <th>Approve</th>
+          <th>Mark Used</th>
+          <th>Nickname</th>
+          <th>Send Notification</th>
+        </tr>`;
+      for (const key in players) {
+        const p = players[key];
+        if (p.used) continue;
+        let status = p.approved ? 'Approved' : 'Pending';
+        let statusClass = p.approved ? 'approved' : 'pending';
+        html += `<tr>
+          <td>${p.trxId || p._trxId}</td>
+          <td class="${statusClass}">${status}</td>
+          <td class="timer-cell" id="timer-${p._uid}-${p._trxId}">--</td>
+          <td>
+            ${!p.approved ? `<button class="approve" onclick="approvePlayer('${p._uid}','${p._trxId}')" id="aprv-${p._uid}-${p._trxId}">Approve</button>` : ''}
+          </td>
+          <td>
+            <button class="reset" onclick="markUsed('${p._uid}','${p._trxId}')">Used</button>
+          </td>
+          <td class="small">${p._playerName || ""}</td>
+          <td>
+            <input type="text" id="notif-msg-${p._uid}-${p._trxId}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${p._uid}')" title="Send">Send</button>
+          </td>
+        </tr>`;
+      }
+      html += `</table>`;
+      document.getElementById('pendingTable').innerHTML = html;
+      startPendingTimers();
     }
     function startPendingTimers() {
-      if (pendingTimersInterval) clearInterval(pendingTimersInterval);
-      updatePendingTimers();
-      pendingTimersInterval = setInterval(updatePendingTimers, 1000);
-    }
-    function updatePendingTimers() {
-      const now = Date.now();
-      for (const key in pendingPlayersList) {
-        const p = pendingPlayersList[key];
-        if (p.used) continue;
-        let reqTime = p.time || 0;
-        const cellId = `timer-${p._uid}-${p._trxId}`;
-        const cell = document.getElementById(cellId);
-        if (cell) {
-          if (reqTime > 0) {
-            let diff = Math.floor((now - reqTime));
-            if (diff < 0) diff = 0;
-            let seconds = Math.floor(diff / 1000) % 60;
-            let minutes = Math.floor(diff / (60 * 1000)) % 60;
-            let hours = Math.floor(diff / (60 * 60 * 1000));
-            let timeStr = "";
-            if (hours > 0) timeStr += hours + "ঘ ";
-            if (minutes > 0 || hours > 0) timeStr += minutes + "মি ";
-            timeStr += seconds + "সেকেন্ড";
-            cell.textContent = timeStr;
-          } else {
-            cell.textContent = "Unknown";
-          }
-        }
-      }
+      // Demo only; timer left as is
     }
 
-    // --- Winner Table ---
+    // --- Winners Table ---
     function renderWinners(winners) {
       let html = `<table>
         <tr>
@@ -274,57 +197,37 @@
           <th>Status</th>
           <th>Paid</th>
           <th>Delete</th>
+          <th>Send Notification</th>
         </tr>`;
       if (winners) {
         Object.entries(winners).sort((a, b) => (b[1].time || 0) - (a[1].time || 0)).forEach(([gameId, w]) => {
           let d = w.time ? (new Date(w.time)).toLocaleString() : '';
           let statusText = (w.paid ? `<span class="paid">Paid</span>` : `<span class="pending">Pending</span>`);
-          // nickname from users
-          let nickname = "";
-          if (w.winnerName) nickname = w.winnerName;
-          else if (usersMap[w.uid] && usersMap[w.uid].playerName) nickname = usersMap[w.uid].playerName;
-          let binanceCell = w.binanceId ? `<span class="binance-id-copy" data-binance="${w.binanceId}" title="Copy">${w.binanceId}</span>` : `<span style="color:#bbb;">—</span>`;
+          let nickname = w.winnerName || (usersMap[w.uid] && usersMap[w.uid].playerName) || "";
           html += `<tr>
             <td>${nickname || "-"}</td>
             <td>${w.trxId || ""}</td>
-            <td>${binanceCell}</td>
+            <td>${w.binanceId || "-"}</td>
             <td>${d}</td>
             <td>${statusText}</td>
             <td>
               ${!w.paid ? `<button class="paid" onclick="setPaid('${gameId}')">Paid</button>` : `<button class="reset" onclick="setPending('${gameId}')">Pending</button>`}
             </td>
             <td>
-              <button class="delete-btn" onclick="deleteWinner('${gameId}')">Delete</button>
+              <button class="reset" onclick="deleteWinner('${gameId}')">Delete</button>
+            </td>
+            <td>
+              <input type="text" id="notif-msg-${w.uid || gameId}" class="msg-input" placeholder="Type notification...">
+              <button class="msg-btn" onclick="sendNotificationToUser('${w.uid || gameId}')" title="Send">Send</button>
             </td>
           </tr>`;
         });
       }
       html += `</table>`;
       document.getElementById('winnersTable').innerHTML = html;
-      setTimeout(() => {
-        document.querySelectorAll('.binance-id-copy').forEach(el => {
-          el.onclick = function() {
-            const binanceId = this.getAttribute('data-binance');
-            if (navigator.clipboard) navigator.clipboard.writeText(binanceId);
-            else {
-              let tmp = document.createElement('input');
-              tmp.value = binanceId;
-              document.body.appendChild(tmp);
-              tmp.select();
-              document.execCommand('copy');
-              document.body.removeChild(tmp);
-            }
-            this.classList.add('copied');
-            this.innerText = 'Copied!';
-            setTimeout(() => {
-              this.classList.remove('copied');
-              this.innerText = binanceId;
-            }, 900);
-          };
-        });
-      }, 200);
     }
-    // --- Users/Points Table ---
+
+    // --- Users Table ---
     function renderUsersTable(users) {
       let html = `<table>
         <tr>
@@ -334,6 +237,7 @@
           <th>Approved</th>
           <th>Points</th>
           <th>Delete</th>
+          <th>Send Notification</th>
         </tr>`;
       for(const uid in users) {
         const u = users[uid];
@@ -346,18 +250,18 @@
           <td>${approvedCount}</td>
           <td>${u.points || 0}</td>
           <td>
-            <button class="delete-btn" onclick="deleteUser('${uid}')">Delete</button>
+            <button class="reset" onclick="deleteUser('${uid}')">Delete</button>
           </td>
-<td>
-    <input type="text" id="notif-msg-${uid}" placeholder="Type notification...">
-    <button onclick="sendNotificationToUser('${uid}')">Send</button>
-  </td>
-          
+          <td>
+            <input type="text" id="notif-msg-${uid}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${uid}')" title="Send">Send</button>
+          </td>
         </tr>`;
       }
       html += `</table>`;
       document.getElementById('usersTable').innerHTML = html;
     }
+
     // --- Dashboard Info ---
     function renderDashboard(users) {
       let totalPlayers = Object.keys(users).length;
@@ -387,6 +291,7 @@
       `;
       document.getElementById('dashboard').innerHTML = html;
     }
+
     // --- Approve/Used/Winner Actions ---
     window.approvePlayer = function(uid, trxId) {
       db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
@@ -423,32 +328,37 @@
       }
     };
 
-
-
-window.sendNotificationToUser = async function(uid, trxId) {
-  const msgInput = document.getElementById('notif-msg-' + uid + '-' + trxId);
-  const msg = msgInput ? msgInput.value.trim() : "";
-  if (!msg) return alert("Message required!");
-  // User DB থেকে FCM Token পড়ুন
-  const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
-  const token = snap.val();
-  if (!token) return alert("User has not enabled notifications");
-
-  // Backend API call করে FCM Push পাঠান (Firebase Client JS থেকে সরাসরি FCM Push করা যায় না)
-  fetch('https://your-server.com/send-fcm', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ token, msg })
-  }).then(res => res.json()).then(data => {
-    if (data.success) alert("Notification sent!");
-    else alert("Failed to send: " + data.error);
-  });
-};
-
-
-
-
-    
+    // --- Admin Notification Send ---
+    window.sendNotificationToUser = async function(uid) {
+      // Find input box (pending players: notif-msg-uid-trxId, users/winners: notif-msg-uid)
+      let inputs = document.querySelectorAll(`[id^="notif-msg-"]`);
+      let msg = "";
+      for (let inp of inputs) {
+        if (
+          inp.id === `notif-msg-${uid}` ||
+          inp.id.startsWith(`notif-msg-${uid}-`)
+        ) {
+          if (inp.value.trim().length > 0) {
+            msg = inp.value.trim();
+            break;
+          }
+        }
+      }
+      if(!msg) return alert("Message required!");
+      // User DB থেকে FCM Token পড়ুন (assume one token per user)
+      const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
+      const token = snap.val();
+      if(!token) return alert("User has not enabled notifications");
+      // Backend API call করে FCM Push পাঠান (আপনার backend endpoint বসান)
+      fetch('https://your-server.com/send-fcm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, msg })
+      }).then(res => res.json()).then(data => {
+        if(data.success) alert("Notification sent!");
+        else alert("Failed to send: " + data.error);
+      });
+    };
   </script>
 </body>
 </html>
