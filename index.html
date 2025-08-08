@@ -327,6 +327,11 @@
           <td>
             <button class="delete-btn" onclick="deleteUser('${uid}')">Delete</button>
           </td>
+<td>
+    <input type="text" id="notif-msg-${uid}" placeholder="Type notification...">
+    <button onclick="sendNotificationToUser('${uid}')">Send</button>
+  </td>
+          
         </tr>`;
       }
       html += `</table>`;
