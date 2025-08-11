@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: "Segoe UI", Arial, sans-serif; background:#f8f9fa; margin:0; padding:0;}
-    .wrapper { max-width: 900px; margin: 22px auto 15px auto; background:#fff; border-radius:14px; box-shadow:0 2px 20px #0001; padding:20px 6px 14px 6px;}
+    .wrapper { max-width: 1000px; margin: 22px auto 15px auto; background:#fff; border-radius:14px; box-shadow:0 2px 20px #0001; padding:20px 6px 14px 6px;}
     h2 { color:#3c8dbc; text-align:center; margin:10px 0 10px 0; font-size:19px;}
     table { width:100%; border-collapse:collapse; margin-top:8px;}
     th, td { border:1px solid #d1d5db; padding:6px 4px; text-align:center; font-size:13px;}
@@ -14,6 +14,7 @@
     td.used { background: #ffeaea; color:#d32f2f;}
     td.approved { background: #eaf6ff; color:#1976d2;}
     td.pending { background: #fffde7; color:#bfa100;}
+    td.rejected { background: #ffcccc; color:#b71c1c;}
     button { padding:3px 8px; border-radius:5px; border:none; cursor:pointer; font-size:13px;}
     .approve { background: #4caf50; color:#fff;}
     .reset { background: #dd4b39; color:#fff;}
@@ -36,6 +37,8 @@
 </head>
 <body>
   <div class="wrapper">
+    <h2>Withdraw Requests</h2>
+    <div id="withdrawTable"></div>
     <h2>Pending Players</h2>
     <div id="admin-auth" style="display:none;">
       <input type="email" id="adminEmail" placeholder="Email">
@@ -105,11 +108,13 @@
       document.getElementById('winnersTable').innerHTML = '';
       document.getElementById('usersTable').innerHTML = '';
       document.getElementById('dashboard').innerHTML = '';
+      document.getElementById('withdrawTable').innerHTML = '';
     }
 
     // --- Admin Data Load ---
     function loadAdminData() {
       fetchAllPendingPlayers(renderPendingPlayers);
+      fetchWithdrawRequests(renderWithdrawRequests);
       db.ref('winners').on('value', snap => {
         const winners = snap.val() || {};
         renderWinners(winners);
@@ -121,7 +126,75 @@
         renderDashboard(users);
       });
       setInterval(() => fetchAllPendingPlayers(renderPendingPlayers), 10000);
+      setInterval(() => fetchWithdrawRequests(renderWithdrawRequests), 10000);
     }
+
+    // --- Withdraw Requests Table ---
+    function fetchWithdrawRequests(renderCb) {
+      db.ref('withdrawRequests').once('value').then(snap => {
+        let allRequests = {};
+        snap.forEach(reqSnap => {
+          const reqId = reqSnap.key;
+          const reqData = reqSnap.val();
+          allRequests[reqId] = reqData;
+        });
+        renderCb(allRequests);
+      });
+    }
+    function renderWithdrawRequests(requests) {
+      let html = `<table>
+        <tr>
+          <th>UID</th>
+          <th>Nickname</th>
+          <th>Amount</th>
+          <th>Binance UID</th>
+          <th>Requested At</th>
+          <th>Status</th>
+          <th>Approve</th>
+          <th>Mark Used</th>
+          <th>Send Notification</th>
+        </tr>`;
+      for(const reqId in requests) {
+        const r = requests[reqId];
+        let statusClass = r.status === 'approved' ? 'approved' 
+                         : r.status === 'pending' ? 'pending'
+                         : r.status === 'used' ? 'used'
+                         : r.status === 'rejected' ? 'rejected'
+                         : '';
+        html += `<tr>
+          <td class="small">${r.uid || "-"}</td>
+          <td>${r.playerName || "-"}</td>
+          <td>${r.amount ? Number(r.amount).toFixed(2) : "0.00"}</td>
+          <td>${r.binanceUID || "-"}</td>
+          <td>${r.requestedAt ? new Date(r.requestedAt).toLocaleString() : "-"}</td>
+          <td class="${statusClass}">${r.status}</td>
+          <td>
+            ${r.status === 'pending' ? `<button class="approve" onclick="approveWithdraw('${reqId}')">Approve</button>` : ''}
+          </td>
+          <td>
+            ${r.status !== 'used' ? `<button class="reset" onclick="markWithdrawUsed('${reqId}')">Used</button>` : ''}
+          </td>
+          <td>
+            <input type="text" id="notif-msg-${reqId}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${r.uid}')" title="Send">Send</button>
+          </td>
+        </tr>`;
+      }
+      html += `</table>`;
+      document.getElementById('withdrawTable').innerHTML = html;
+    }
+    window.approveWithdraw = function(reqId) {
+      db.ref('withdrawRequests/' + reqId).update({ status: "approved" })
+        .then(() => fetchWithdrawRequests(renderWithdrawRequests))
+        .catch(err => alert('Error: ' + err.message));
+    };
+    window.markWithdrawUsed = function(reqId) {
+      if (confirm("Mark this withdraw as USED?")) {
+        db.ref('withdrawRequests/' + reqId).update({ status: "used" })
+        .then(() => fetchWithdrawRequests(renderWithdrawRequests))
+        .catch(err => alert('Error: ' + err.message));
+      }
+    };
 
     // --- Pending Players Table ---
     let pendingPlayersList = {};
@@ -330,7 +403,6 @@
 
     // --- Admin Notification Send ---
     window.sendNotificationToUser = async function(uid) {
-      // Find input box (pending players: notif-msg-uid-trxId, users/winners: notif-msg-uid)
       let inputs = document.querySelectorAll(`[id^="notif-msg-"]`);
       let msg = "";
       for (let inp of inputs) {
@@ -349,7 +421,6 @@
       const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
       const token = snap.val();
       if(!token) return alert("User has not enabled notifications");
-      // Backend API call করে FCM Push পাঠান (আপনার backend endpoint বসান)
       fetch('http://localhost:3000/send-fcm', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
