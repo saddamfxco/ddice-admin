@@ -37,6 +37,9 @@
 <body>
   <div class="wrapper">
     <h2>Pending Players</h2>
+    <div id="admin-controls" style="text-align:center; margin:10px 0; display:none;">
+      <button onclick="adminLogout()" style="background:#dd4b39;color:#fff;padding:5px 10px;border:none;border-radius:5px;">Logout</button>
+    </div>
     <div id="admin-auth" style="display:none;">
       <input type="email" id="adminEmail" placeholder="Email">
       <input type="password" id="adminPass" placeholder="Password">
@@ -54,11 +57,12 @@
       Firebase ডাটাবেস রুলস শুধুমাত্র এডমিন রিড/রাইট দিবেন।
     </div>
   </div>
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <script>
+  <!-- Firebase SDKs - Modular v9+ -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+    import { getDatabase, ref, on, once, update, remove, child, push } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+
     // === CONFIG ===
     const firebaseConfig = {
       apiKey: "AIzaSyDLhqeEYZmHHjYB1TtyZndsQk2wUfIW37k",
@@ -69,8 +73,9 @@
       messagingSenderId: "1079545705926",
       appId: "1:1079545705926:web:af3f21bfbad5f866b52ec7"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
     const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63";
     let isAdmin = false;
     let usersMap = {};
@@ -81,24 +86,48 @@
         Checking authentication...
       </div>
     `;
-    firebase.auth().onAuthStateChanged(function(user) {
+    
+    // Modular SDK authentication state listener
+    onAuthStateChanged(auth, function(user) {
       if(user && user.uid === ADMIN_UID) {
         isAdmin = true;
         document.getElementById('admin-auth').style.display = "none";
+        document.getElementById('admin-controls').style.display = "";
         loadAdminData();
       } else {
         isAdmin = false;
         clearTables();
         document.getElementById('admin-auth').style.display = "";
+        document.getElementById('admin-controls').style.display = "none";
       }
     });
+    
+    // RequireLogin function to gate actions for authenticated admin users
+    function requireLogin(action) {
+      if (!isAdmin) {
+        alert("Admin authentication required. Please log in first.");
+        return false;
+      }
+      if (typeof action === 'function') {
+        action();
+      }
+      return true;
+    }
     function adminLogin() {
       const email = document.getElementById('adminEmail').value.trim();
       const pass = document.getElementById('adminPass').value.trim();
       document.getElementById('authMsg').textContent = '';
-      firebase.auth().signInWithEmailAndPassword(email, pass).catch(err=>{
+      signInWithEmailAndPassword(auth, email, pass).catch(err=>{
         document.getElementById('authMsg').textContent = err.message;
       });
+    }
+    
+    function adminLogout() {
+      if (confirm("Are you sure you want to logout?")) {
+        signOut(auth).catch(err => {
+          alert('Logout error: ' + err.message);
+        });
+      }
     }
     function clearTables() {
       document.getElementById('pendingTable').innerHTML = '';
@@ -110,11 +139,11 @@
     // --- Admin Data Load ---
     function loadAdminData() {
       fetchAllPendingPlayers(renderPendingPlayers);
-      db.ref('winners').on('value', snap => {
+      on(ref(db, 'winners'), 'value', (snap) => {
         const winners = snap.val() || {};
         renderWinners(winners);
       });
-      db.ref('users').on('value', snap => {
+      on(ref(db, 'users'), 'value', (snap) => {
         const users = snap.val() || {};
         usersMap = users;
         renderUsersTable(users);
@@ -126,7 +155,7 @@
     // --- Pending Players Table ---
     let pendingPlayersList = {};
     function fetchAllPendingPlayers(renderCb) {
-      db.ref('users').once('value').then(snap => {
+      once('value', ref(db, 'users')).then(snap => {
         let allPlayers = {};
         snap.forEach(userSnap => {
           const uid = userSnap.key;
@@ -294,42 +323,55 @@
 
     // --- Approve/Used/Winner Actions ---
     window.approvePlayer = function(uid, trxId) {
-      db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
-        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
-        .catch(err => alert('Error: ' + err.message));
+      requireLogin(() => {
+        update(ref(db, 'users/' + uid + '/pendingPlayers/' + trxId), { approved: true })
+          .then(() => fetchAllPendingPlayers(renderPendingPlayers))
+          .catch(err => alert('Error: ' + err.message));
+      });
     };
     window.markUsed = function(uid, trxId) {
-      if (confirm("Used?")) {
-        db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ used: true })
-        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
-        .catch(err => alert('Error: ' + err.message));
-      }
+      requireLogin(() => {
+        if (confirm("Used?")) {
+          update(ref(db, 'users/' + uid + '/pendingPlayers/' + trxId), { used: true })
+          .then(() => fetchAllPendingPlayers(renderPendingPlayers))
+          .catch(err => alert('Error: ' + err.message));
+        }
+      });
     };
     window.setPaid = function(gameId) {
-      db.ref('winners/' + gameId).update({ paid: true, approved: true })
-        .catch(err => alert('Error: ' + err.message));
+      requireLogin(() => {
+        update(ref(db, 'winners/' + gameId), { paid: true, approved: true })
+          .catch(err => alert('Error: ' + err.message));
+      });
     };
     window.setPending = function(gameId) {
-      db.ref('winners/' + gameId).update({ paid: false })
-        .catch(err => alert('Error: ' + err.message));
+      requireLogin(() => {
+        update(ref(db, 'winners/' + gameId), { paid: false })
+          .catch(err => alert('Error: ' + err.message));
+      });
     };
 
     // --- Delete Actions ---
     window.deleteWinner = function(gameId) {
-      if (confirm("Are you sure you want to delete this winner?")) {
-        db.ref('winners/' + gameId).remove()
-          .catch(err => alert('Error: ' + err.message));
-      }
+      requireLogin(() => {
+        if (confirm("Are you sure you want to delete this winner?")) {
+          remove(ref(db, 'winners/' + gameId))
+            .catch(err => alert('Error: ' + err.message));
+        }
+      });
     };
     window.deleteUser = function(uid) {
-      if (confirm("Are you sure you want to delete this user?")) {
-        db.ref('users/' + uid).remove()
-          .catch(err => alert('Error: ' + err.message));
-      }
+      requireLogin(() => {
+        if (confirm("Are you sure you want to delete this user?")) {
+          remove(ref(db, 'users/' + uid))
+            .catch(err => alert('Error: ' + err.message));
+        }
+      });
     };
 
     // --- Admin Notification Send ---
     window.sendNotificationToUser = async function(uid) {
+      if (!requireLogin(() => {})) return;
       // Find input box (pending players: notif-msg-uid-trxId, users/winners: notif-msg-uid)
       let inputs = document.querySelectorAll(`[id^="notif-msg-"]`);
       let msg = "";
@@ -346,7 +388,7 @@
       }
       if(!msg) return alert("Message required!");
       // User DB থেকে FCM Token পড়ুন (assume one token per user)
-      const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
+      const snap = await once('value', ref(db, 'users/' + uid + '/fcmToken'));
       const token = snap.val();
       if(!token) return alert("User has not enabled notifications");
       // Backend API call করে FCM Push পাঠান (আপনার backend endpoint বসান)
@@ -359,6 +401,12 @@
         else alert("Failed to send: " + data.error);
       });
     };
+    
+    // Make functions available globally
+    window.requireLogin = requireLogin;
+    window.adminLogin = adminLogin;
+    window.adminLogout = adminLogout;
+    
   </script>
 </body>
 </html>
