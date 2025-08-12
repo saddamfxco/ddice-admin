@@ -39,6 +39,10 @@
   <div class="wrapper">
     <h2>Withdraw Requests</h2>
     <div id="withdrawTable"></div>
+
+    <h2>Deposit Requests</h2>
+    <div id="depositTable"></div>
+
     <div id="admin-auth" style="display:none;">
       <input type="email" id="adminEmail" placeholder="Email">
       <input type="password" id="adminPass" placeholder="Password">
@@ -77,6 +81,11 @@
         Checking authentication...
       </div>
     `;
+    document.getElementById('depositTable').innerHTML = `
+      <div style="text-align:center;margin:15px 0 0 0;font-size:15px;">
+        Checking authentication...
+      </div>
+    `;
     firebase.auth().onAuthStateChanged(function(user) {
       if(user && user.uid === ADMIN_UID) {
         isAdmin = true;
@@ -98,17 +107,22 @@
     }
     function clearTables() {
       document.getElementById('withdrawTable').innerHTML = '';
+      document.getElementById('depositTable').innerHTML = '';
       document.getElementById('dashboard').innerHTML = '';
     }
 
     // --- Admin Data Load ---
     function loadAdminData() {
       fetchWithdrawRequests(renderWithdrawRequests);
+      fetchDepositRequests(renderDepositRequests);
       db.ref('users').on('value', snap => {
         const users = snap.val() || {};
         renderDashboard(users);
       });
-      setInterval(() => fetchWithdrawRequests(renderWithdrawRequests), 10000);
+      setInterval(() => {
+        fetchWithdrawRequests(renderWithdrawRequests);
+        fetchDepositRequests(renderDepositRequests);
+      }, 10000);
     }
 
     // --- Withdraw Requests Table ---
@@ -158,7 +172,7 @@
           </td>
           <td>
             <input type="text" id="notif-msg-${reqId}" class="msg-input" placeholder="Type notification...">
-            <button class="msg-btn" onclick="sendNotificationToUser('${r.uid}')" title="Send">Send</button>
+            <button class="msg-btn" onclick="sendNotificationToUser('${r.uid}', 'withdraw', '${reqId}')" title="Send">Send</button>
           </td>
         </tr>`;
       }
@@ -210,20 +224,111 @@
       }
     };
 
+    // --- Deposit Requests Table ---
+    function fetchDepositRequests(renderCb) {
+      db.ref('depositRequests').once('value').then(snap => {
+        let allDeposits = {};
+        snap.forEach(depSnap => {
+          const depId = depSnap.key;
+          const depData = depSnap.val();
+          allDeposits[depId] = depData;
+        });
+        renderCb(allDeposits);
+      });
+    }
+    function renderDepositRequests(deposits) {
+      let html = `<table>
+        <tr>
+          <th>UID</th>
+          <th>Nickname</th>
+          <th>Amount</th>
+          <th>Order ID</th>
+          <th>Requested At</th>
+          <th>Status</th>
+          <th>Approve</th>
+          <th>Reject</th>
+          <th>Send Notification</th>
+        </tr>`;
+      for(const depId in deposits) {
+        const d = deposits[depId];
+        let statusClass = d.status === 'approved' ? 'approved' 
+                         : d.status === 'pending' ? 'pending'
+                         : d.status === 'rejected' ? 'rejected'
+                         : '';
+        html += `<tr>
+          <td class="small">${d.uid || "-"}</td>
+          <td>${d.playerName || "-"}</td>
+          <td>${d.amount ? Number(d.amount).toFixed(2) : "0.00"}</td>
+          <td>${d.orderId || "-"}</td>
+          <td>${d.requestedAt ? new Date(d.requestedAt).toLocaleString() : "-"}</td>
+          <td class="${statusClass}">${d.status}</td>
+          <td>
+            ${d.status === 'pending' ? `<button class="approve" onclick="approveDeposit('${depId}', this)">Approve</button>` : ''}
+          </td>
+          <td>
+            ${d.status === 'pending' ? `<button class="reset" onclick="rejectDeposit('${depId}')">Reject</button>` : ''}
+          </td>
+          <td>
+            <input type="text" id="dep-notif-msg-${depId}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${d.uid}', 'deposit', '${depId}')" title="Send">Send</button>
+          </td>
+        </tr>`;
+      }
+      html += `</table>`;
+      document.getElementById('depositTable').innerHTML = html;
+    }
+
+    // --- Deposit Approve Logic: Balance Update ---
+    window.approveDeposit = async function(depId, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const depSnap = await db.ref('depositRequests/' + depId).once('value');
+        const dep = depSnap.val();
+        if (!dep || dep.status !== "pending") throw new Error("Invalid request or already processed");
+
+        // ইউজার ডাটা
+        const userRef = db.ref('users/' + dep.uid);
+        const userSnap = await userRef.once('value');
+        const userData = userSnap.val() || {};
+        const currBalance = Number(userData.balance || 0);
+        const amount = Number(dep.amount || 0);
+        const newBalance = Math.max(currBalance + amount, 0.01);
+
+        // Update user balance and winHistory
+        await userRef.update({
+          balance: Number(newBalance.toFixed(2)),
+          winHistory: Array.isArray(userData.winHistory) ? [...userData.winHistory, { time: Date.now(), amount }] : [{ time: Date.now(), amount }]
+        });
+
+        // Approve the deposit request
+        await db.ref('depositRequests/' + depId).update({
+          status: "approved",
+          approvedAt: Date.now()
+        });
+        alert("Deposit approved & balance updated!");
+        fetchDepositRequests(renderDepositRequests);
+      } catch (err) {
+        alert("Error: " + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+
+    window.rejectDeposit = function(depId) {
+      if (confirm("Reject this deposit request?")) {
+        db.ref('depositRequests/' + depId).update({ status: "rejected" })
+        .then(() => fetchDepositRequests(renderDepositRequests))
+        .catch(err => alert('Error: ' + err.message));
+      }
+    };
+
     // --- Admin Notification Send ---
-    window.sendNotificationToUser = async function(uid) {
-      let inputs = document.querySelectorAll(`[id^="notif-msg-"]`);
+    window.sendNotificationToUser = async function(uid, type, reqId) {
       let msg = "";
-      for (let inp of inputs) {
-        if (
-          inp.id === `notif-msg-${uid}` ||
-          inp.id.startsWith(`notif-msg-${uid}-`)
-        ) {
-          if (inp.value.trim().length > 0) {
-            msg = inp.value.trim();
-            break;
-          }
-        }
+      if(type === "deposit") {
+        msg = document.getElementById(`dep-notif-msg-${reqId}`)?.value?.trim();
+      } else {
+        msg = document.getElementById(`notif-msg-${reqId}`)?.value?.trim();
       }
       if(!msg) return alert("Message required!");
       // User DB থেকে FCM Token পড়ুন (assume one token per user)
