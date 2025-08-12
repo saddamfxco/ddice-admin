@@ -180,7 +180,7 @@
       document.getElementById('withdrawTable').innerHTML = html;
     }
 
-    // --- Withdraw Approve Logic: Balance Update ---
+    // --- Withdraw Approve Logic: Balance Update (NO lossHistory update!) ---
     window.approveWithdraw = async function(reqId, btn) {
       if (btn) btn.disabled = true;
       try {
@@ -196,10 +196,9 @@
         if (currBalance < amount) throw new Error("Insufficient user balance!");
         const newBalance = Math.max(currBalance - amount, 0.01);
 
-        // Update user balance and lossHistory
+        // Update user balance ONLY (no lossHistory update!)
         await userRef.update({
-          balance: Number(newBalance.toFixed(2)),
-          lossHistory: Array.isArray(userData.lossHistory) ? [...userData.lossHistory, { time: Date.now(), amount }] : [{ time: Date.now(), amount }]
+          balance: Number(newBalance.toFixed(2))
         });
 
         // Approve the withdraw request
