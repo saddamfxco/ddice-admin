@@ -72,7 +72,7 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63";
+    const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63"; // আপনার এডমিন UID দিন
     let isAdmin = false;
 
     // === AUTH ===
@@ -278,7 +278,7 @@
       document.getElementById('depositTable').innerHTML = html;
     }
 
-    // --- Deposit Approve Logic: Balance Update ---
+    // --- Deposit Approve Logic: Balance Update (NO winHistory update!) ---
     window.approveDeposit = async function(depId, btn) {
       if (btn) btn.disabled = true;
       try {
@@ -294,10 +294,9 @@
         const amount = Number(dep.amount || 0);
         const newBalance = Math.max(currBalance + amount, 0.01);
 
-        // Update user balance and winHistory
+        // Update user balance ONLY (don't touch winHistory!)
         await userRef.update({
-          balance: Number(newBalance.toFixed(2)),
-          winHistory: Array.isArray(userData.winHistory) ? [...userData.winHistory, { time: Date.now(), amount }] : [{ time: Date.now(), amount }]
+          balance: Number(newBalance.toFixed(2))
         });
 
         // Approve the deposit request
