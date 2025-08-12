@@ -39,18 +39,12 @@
   <div class="wrapper">
     <h2>Withdraw Requests</h2>
     <div id="withdrawTable"></div>
-    <h2>Pending Players</h2>
     <div id="admin-auth" style="display:none;">
       <input type="email" id="adminEmail" placeholder="Email">
       <input type="password" id="adminPass" placeholder="Password">
       <button onclick="adminLogin()">Log In</button>
       <div id="authMsg" style="color:#b71c1c;margin-top:6px;font-size:13px;"></div>
     </div>
-    <div id="pendingTable"></div>
-    <h2 style="margin-top:18px;">Winners & Ready Players</h2>
-    <div id="winnersTable"></div>
-    <h2 style="margin-top:18px;">All Players & Points</h2>
-    <div id="usersTable"></div>
     <div class="dashboard" id="dashboard"></div>
     <div style="margin-top:22px;color:#b71c1c;text-align:center; font-size:12px;">
       <b>নোট:</b> এই পেজ প্রোডাকশনে রক্ষা করুন।<br>
@@ -76,10 +70,9 @@
     const db = firebase.database();
     const ADMIN_UID = "XvrwYBQG5tTdqmmrfkFymIl3rP63";
     let isAdmin = false;
-    let usersMap = {};
 
     // === AUTH ===
-    document.getElementById('pendingTable').innerHTML = `
+    document.getElementById('withdrawTable').innerHTML = `
       <div style="text-align:center;margin:15px 0 0 0;font-size:15px;">
         Checking authentication...
       </div>
@@ -104,28 +97,17 @@
       });
     }
     function clearTables() {
-      document.getElementById('pendingTable').innerHTML = '';
-      document.getElementById('winnersTable').innerHTML = '';
-      document.getElementById('usersTable').innerHTML = '';
-      document.getElementById('dashboard').innerHTML = '';
       document.getElementById('withdrawTable').innerHTML = '';
+      document.getElementById('dashboard').innerHTML = '';
     }
 
     // --- Admin Data Load ---
     function loadAdminData() {
-      fetchAllPendingPlayers(renderPendingPlayers);
       fetchWithdrawRequests(renderWithdrawRequests);
-      db.ref('winners').on('value', snap => {
-        const winners = snap.val() || {};
-        renderWinners(winners);
-      });
       db.ref('users').on('value', snap => {
         const users = snap.val() || {};
-        usersMap = users;
-        renderUsersTable(users);
         renderDashboard(users);
       });
-      setInterval(() => fetchAllPendingPlayers(renderPendingPlayers), 10000);
       setInterval(() => fetchWithdrawRequests(renderWithdrawRequests), 10000);
     }
 
@@ -228,45 +210,6 @@
       }
     };
 
-    // --- Pending Players Table ---
-    // ... [unchanged: rest of pendingPlayers, winners, users table logic] ...
-
-    // --- Approve/Used/Winner Actions ---
-    window.approvePlayer = function(uid, trxId) {
-      db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ approved: true })
-        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
-        .catch(err => alert('Error: ' + err.message));
-    };
-    window.markUsed = function(uid, trxId) {
-      if (confirm("Used?")) {
-        db.ref('users/' + uid + '/pendingPlayers/' + trxId).update({ used: true })
-        .then(() => fetchAllPendingPlayers(renderPendingPlayers))
-        .catch(err => alert('Error: ' + err.message));
-      }
-    };
-    window.setPaid = function(gameId) {
-      db.ref('winners/' + gameId).update({ paid: true, approved: true })
-        .catch(err => alert('Error: ' + err.message));
-    };
-    window.setPending = function(gameId) {
-      db.ref('winners/' + gameId).update({ paid: false })
-        .catch(err => alert('Error: ' + err.message));
-    };
-
-    // --- Delete Actions ---
-    window.deleteWinner = function(gameId) {
-      if (confirm("Are you sure you want to delete this winner?")) {
-        db.ref('winners/' + gameId).remove()
-          .catch(err => alert('Error: ' + err.message));
-      }
-    };
-    window.deleteUser = function(uid) {
-      if (confirm("Are you sure you want to delete this user?")) {
-        db.ref('users/' + uid).remove()
-          .catch(err => alert('Error: ' + err.message));
-      }
-    };
-
     // --- Admin Notification Send ---
     window.sendNotificationToUser = async function(uid) {
       let inputs = document.querySelectorAll(`[id^="notif-msg-"]`);
@@ -296,7 +239,18 @@
         else alert("Failed to send: " + data.error);
       });
     };
-    // ... [rest of unchanged code for winnersTable, usersTable, dashboard] ...
+
+    // --- Dashboard (optional summary, can be customized or removed) ---
+    function renderDashboard(users) {
+      let totalUsers = Object.keys(users).length;
+      let totalBalance = Object.values(users).reduce((sum, u) => sum + Number(u.balance || 0), 0);
+      let html = `
+        <h3>Dashboard</h3>
+        <div>মোট ইউজার: <b>${totalUsers}</b></div>
+        <div>মোট ব্যালেন্স: <b>${totalBalance.toFixed(2)}</b></div>
+      `;
+      document.getElementById('dashboard').innerHTML = html;
+    }
   </script>
 </body>
 </html>
