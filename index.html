@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: "Segoe UI", Arial, sans-serif; background:#f8f9fa; margin:0; padding:0;}
-    .wrapper { max-width: 1000px; margin: 22px auto 15px auto; background:#fff; border-radius:14px; box-shadow:0 2px 20px #0001; padding:20px 6px 14px 6px;}
+    .wrapper { max-width: 1100px; margin: 22px auto 15px auto; background:#fff; border-radius:14px; box-shadow:0 2px 20px #0001; padding:20px 6px 14px 6px;}
     h2 { color:#3c8dbc; text-align:center; margin:10px 0 10px 0; font-size:19px;}
     table { width:100%; border-collapse:collapse; margin-top:8px;}
     th, td { border:1px solid #d1d5db; padding:6px 4px; text-align:center; font-size:13px;}
@@ -28,10 +28,21 @@
     #admin-auth input {padding:6px 7px;font-size:14px;}
     .dashboard {margin-top:24px; background:#f9f9fc; border-radius:8px; padding:10px 7px;}
     .dashboard h3 {margin:0 0 8px 0; color:#1d6fa5; font-size:16px;}
-    @media (max-width: 700px) {
+    /* --- Notification Box --- */
+    #notifBox { background:#ecf6ff; border-radius:10px; margin:24px 0 16px 0; padding:14px 13px; box-shadow:0 2px 10px #1976d209;}
+    #notifBox h3 { margin:0 0 8px 0; color:#1976d2; font-size:17px;}
+    #notifBox .notif-list { max-height:260px; overflow-y:auto; margin-bottom:8px;}
+    #notifBox table { width:100%; font-size:13px;}
+    #notifBox th, #notifBox td { border:1px solid #c2d4ea; padding:5px 3px;}
+    #notifBox th { background:#d6eaff; }
+    #notifBox .all-btns { margin-bottom:7px; }
+    #notifBox .msg-input { width:130px; margin-bottom:3px; }
+    #notifBox .msg-btn { margin-bottom:3px; }
+    @media (max-width: 900px) {
       .wrapper { padding: 3px 1px 5px 1px;}
       table, th, td { font-size: 12px;}
       .msg-input { width: 60px; }
+      #notifBox .msg-input { width: 75px; }
     }
   </style>
 </head>
@@ -42,6 +53,30 @@
 
     <h2>Deposit Requests</h2>
     <div id="depositTable"></div>
+
+    <!-- Notification Box for FCM-enabled users -->
+    <div id="notifBox" style="display:none;">
+      <h3>🔔 Notification Panel (FCM Enabled Users)</h3>
+      <div class="all-btns">
+        <input type="text" id="notif-all-msg" class="msg-input" placeholder="Message for all...">
+        <button class="msg-btn" id="sendToAllBtn">Send to ALL</button>
+      </div>
+      <div class="notif-list">
+        <table id="notifUserTable">
+          <thead>
+            <tr>
+              <th>UID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>FCM Token</th>
+              <th>Send Msg</th>
+            </tr>
+          </thead>
+          <tbody id="notifUserTbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <div id="admin-auth" style="display:none;">
       <input type="email" id="adminEmail" placeholder="Email">
@@ -74,6 +109,7 @@
     const db = firebase.database();
     const ADMIN_UID = "g9eSLNotdMh0lOQMSoB0ZosTgA03"; // আপনার এডমিন UID দিন
     let isAdmin = false;
+    let fcmUsers = {}; // cache FCM-enabled users
 
     // === AUTH ===
     document.getElementById('withdrawTable').innerHTML = `
@@ -91,10 +127,13 @@
         isAdmin = true;
         document.getElementById('admin-auth').style.display = "none";
         loadAdminData();
+        document.getElementById('notifBox').style.display = '';
+        loadFcmUsers();
       } else {
         isAdmin = false;
         clearTables();
         document.getElementById('admin-auth').style.display = "";
+        document.getElementById('notifBox').style.display = 'none';
       }
     });
     function adminLogin() {
@@ -109,6 +148,8 @@
       document.getElementById('withdrawTable').innerHTML = '';
       document.getElementById('depositTable').innerHTML = '';
       document.getElementById('dashboard').innerHTML = '';
+      document.getElementById('notifBox').style.display = 'none';
+      document.getElementById('notifUserTbody').innerHTML = '';
     }
 
     // --- Admin Data Load ---
@@ -122,6 +163,7 @@
       setInterval(() => {
         fetchWithdrawRequests(renderWithdrawRequests);
         fetchDepositRequests(renderDepositRequests);
+        loadFcmUsers();
       }, 10000);
     }
 
@@ -320,7 +362,85 @@
       }
     };
 
-    // --- Admin Notification Send ---
+    // --- FCM USERS NOTIFICATION PANEL --- //
+    function loadFcmUsers() {
+      db.ref('users').once('value').then(snap => {
+        let rows = '';
+        let users = snap.val() || {};
+        fcmUsers = {};
+        for(const uid in users) {
+          const user = users[uid];
+          if(user.fcmToken) {
+            // Cache user for send-to-all
+            fcmUsers[uid] = { ...user, uid };
+            rows += `
+              <tr>
+                <td>${uid}</td>
+                <td>${user.playerName || user.displayName || '-'}</td>
+                <td>${user.email || '-'}</td>
+                <td style="max-width:110px;overflow-x:auto;">${user.fcmToken.slice(0,18)}...<span title="Copy" style="cursor:pointer;color:#1976d2;" onclick="copyFcmToken('${user.fcmToken}')">📋</span></td>
+                <td>
+                  <input type="text" class="msg-input" id="notif-msg-user-${uid}" placeholder="Message...">
+                  <button class="msg-btn" onclick="sendPersonalNotif('${uid}')">Send</button>
+                </td>
+              </tr>
+            `;
+          }
+        }
+        document.getElementById('notifUserTbody').innerHTML = rows || `<tr><td colspan=5 style="text-align:center;color:#d32f2f;">No FCM-enabled users found.</td></tr>`;
+      });
+    }
+
+    // Copy token helper
+    window.copyFcmToken = function(token) {
+      navigator.clipboard.writeText(token).then(()=>alert('FCM Token copied!'));
+    };
+
+    // Send personal notification
+    window.sendPersonalNotif = function(uid) {
+      const msg = document.getElementById('notif-msg-user-' + uid)?.value?.trim();
+      if(!msg) return alert("Message required!");
+      const user = fcmUsers[uid];
+      if(!user || !user.fcmToken) return alert("No FCM token for this user!");
+      sendFcmMsg(user.fcmToken, msg);
+    };
+
+    // Send notification to ALL (in sequence)
+    document.getElementById('sendToAllBtn').onclick = async function() {
+      const msg = document.getElementById('notif-all-msg').value.trim();
+      if(!msg) return alert("Enter a message!");
+      if(!Object.keys(fcmUsers).length) return alert("No FCM-enabled users.");
+      if(!confirm("Send this message to all FCM-enabled users?")) return;
+      let errors = 0, sent = 0;
+      for(const uid in fcmUsers) {
+        const token = fcmUsers[uid].fcmToken;
+        try {
+          await sendFcmMsg(token, msg, true);
+          sent++;
+        } catch(e) {
+          errors++;
+        }
+      }
+      alert(`Sent to ${sent} users. Failed: ${errors}`);
+    };
+
+    // --- Backend FCM POST logic (localhost:3000/send-fcm) ---
+    async function sendFcmMsg(token, msg, silent) {
+      const res = await fetch('http://localhost:3000/send-fcm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, msg })
+      });
+      const data = await res.json();
+      if(!data.success) {
+        if(!silent) alert("Failed to send: " + (data.error || "Unknown error"));
+        throw new Error(data.error);
+      }
+      if(!silent) alert("Notification sent!");
+      return true;
+    }
+
+    // --- Old notification logic for requests ---
     window.sendNotificationToUser = async function(uid, type, reqId) {
       let msg = "";
       if(type === "deposit") {
@@ -333,14 +453,7 @@
       const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
       const token = snap.val();
       if(!token) return alert("User has not enabled notifications");
-      fetch('http://localhost:3000/send-fcm', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ token, msg })
-      }).then(res => res.json()).then(data => {
-        if(data.success) alert("Notification sent!");
-        else alert("Failed to send: " + data.error);
-      });
+      await sendFcmMsg(token, msg);
     };
 
     // --- Dashboard (optional summary, can be customized or removed) ---
