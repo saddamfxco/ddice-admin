@@ -90,6 +90,7 @@
       Firebase ডাটাবেস রুলস শুধুমাত্র এডমিন রিড/রাইট দিবেন।
     </div>
   </div>
+
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -107,9 +108,22 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+
+    // === ADMIN ===
     const ADMIN_UID = "g9eSLNotdMh0lOQMSoB0ZosTgA03"; // আপনার এডমিন UID দিন
     let isAdmin = false;
     let fcmUsers = {}; // cache FCM-enabled users
+
+    // Local state for real-time tables
+    let withdrawMap = {}; // { reqId: {...} }
+    let depositMap  = {}; // { depId: {...} }
+
+    let withdrawBootstrapped = false;
+    let depositBootstrapped  = false;
+
+    // Helpers
+    const getReqTime = (r) => Number(r?.requestedAt || r?.approvedAt || r?.createdAt || 0);
+    const byNewest = (a, b) => getReqTime(b) - getReqTime(a);
 
     // === AUTH ===
     document.getElementById('withdrawTable').innerHTML = `
@@ -122,20 +136,22 @@
         Checking authentication...
       </div>
     `;
+
     firebase.auth().onAuthStateChanged(function(user) {
       if(user && user.uid === ADMIN_UID) {
         isAdmin = true;
         document.getElementById('admin-auth').style.display = "none";
         loadAdminData();
         document.getElementById('notifBox').style.display = '';
-        loadFcmUsers();
       } else {
         isAdmin = false;
+        detachAllListeners();
         clearTables();
         document.getElementById('admin-auth').style.display = "";
         document.getElementById('notifBox').style.display = 'none';
       }
     });
+
     function adminLogin() {
       const email = document.getElementById('adminEmail').value.trim();
       const pass = document.getElementById('adminPass').value.trim();
@@ -144,42 +160,206 @@
         document.getElementById('authMsg').textContent = err.message;
       });
     }
+
     function clearTables() {
       document.getElementById('withdrawTable').innerHTML = '';
       document.getElementById('depositTable').innerHTML = '';
       document.getElementById('dashboard').innerHTML = '';
-      document.getElementById('notifBox').style.display = 'none';
       document.getElementById('notifUserTbody').innerHTML = '';
+      withdrawMap = {};
+      depositMap = {};
+      withdrawBootstrapped = false;
+      depositBootstrapped = false;
+    }
+
+    let withdrawRef, depositRef, usersRef, usersNotifRef;
+    function detachAllListeners() {
+      if (withdrawRef) withdrawRef.off();
+      if (depositRef)  depositRef.off();
+      if (usersRef)    usersRef.off();
+      if (usersNotifRef) usersNotifRef.off();
     }
 
     // --- Admin Data Load ---
     function loadAdminData() {
-      fetchWithdrawRequests(renderWithdrawRequests);
-      fetchDepositRequests(renderDepositRequests);
-      db.ref('users').on('value', snap => {
+      attachWithdrawListeners();
+      attachDepositListeners();
+
+      // Dashboard and FCM users live updates
+      usersRef = db.ref('users');
+      usersRef.on('value', snap => {
         const users = snap.val() || {};
         renderDashboard(users);
       });
-      setInterval(() => {
-        fetchWithdrawRequests(renderWithdrawRequests);
-        fetchDepositRequests(renderDepositRequests);
-        loadFcmUsers();
-      }, 10000);
+
+      usersNotifRef = db.ref('users');
+      usersNotifRef.on('value', snap => {
+        const users = snap.val() || {};
+        renderFcmUsers(users);
+      });
+    }
+
+    // === WITHDRAW: Real-time + De-duplication (keep latest pending per user) ===
+    function attachWithdrawListeners() {
+      const path = 'withdrawRequests';
+      withdrawRef = db.ref(path);
+
+      // Initial load + one-time dedup
+      withdrawRef.once('value').then(snap => {
+        withdrawMap = {};
+        snap.forEach(child => {
+          const reqId = child.key;
+          const data  = child.val() || {};
+          withdrawMap[reqId] = data;
+        });
+        // Dedup pending requests per UID (keep latest by requestedAt)
+        dedupRequestsInDB('withdraw');
+
+        renderWithdrawRequests();
+        withdrawBootstrapped = true;
+
+        // Attach real-time listeners
+        withdrawRef.on('child_added', s => {
+          const id = s.key, data = s.val() || {};
+          withdrawMap[id] = data;
+
+          if (withdrawBootstrapped) {
+            ensureOnlyLatestPending('withdraw', id, data);
+          }
+          renderWithdrawRequests();
+        });
+
+        withdrawRef.on('child_changed', s => {
+          const id = s.key, data = s.val() || {};
+          withdrawMap[id] = data;
+          renderWithdrawRequests();
+        });
+
+        withdrawRef.on('child_removed', s => {
+          const id = s.key;
+          delete withdrawMap[id];
+          renderWithdrawRequests();
+        });
+      });
+    }
+
+    // === DEPOSIT: Real-time + De-duplication (keep latest pending per user) ===
+    function attachDepositListeners() {
+      const path = 'depositRequests';
+      depositRef = db.ref(path);
+
+      // Initial load + one-time dedup
+      depositRef.once('value').then(snap => {
+        depositMap = {};
+        snap.forEach(child => {
+          const depId = child.key;
+          const data  = child.val() || {};
+          depositMap[depId] = data;
+        });
+        // Dedup pending requests per UID (keep latest by requestedAt)
+        dedupRequestsInDB('deposit');
+
+        renderDepositRequests();
+        depositBootstrapped = true;
+
+        // Attach real-time listeners
+        depositRef.on('child_added', s => {
+          const id = s.key, data = s.val() || {};
+          depositMap[id] = data;
+
+          if (depositBootstrapped) {
+            ensureOnlyLatestPending('deposit', id, data);
+          }
+          renderDepositRequests();
+        });
+
+        depositRef.on('child_changed', s => {
+          const id = s.key, data = s.val() || {};
+          depositMap[id] = data;
+          renderDepositRequests();
+        });
+
+        depositRef.on('child_removed', s => {
+          const id = s.key;
+          delete depositMap[id];
+          renderDepositRequests();
+        });
+      });
+    }
+
+    // Remove older PENDING requests per UID from DB, keep latest one
+    function dedupRequestsInDB(kind) {
+      const isWithdraw = kind === 'withdraw';
+      const map = isWithdraw ? withdrawMap : depositMap;
+      const path = isWithdraw ? 'withdrawRequests' : 'depositRequests';
+
+      // Group by uid for pending only
+      const groups = {};
+      Object.entries(map).forEach(([id, r]) => {
+        if (!r || !r.uid) return;
+        if (String(r.status) !== 'pending') return; // only pending dedup (safe)
+        if (!groups[r.uid]) groups[r.uid] = [];
+        groups[r.uid].push({ id, data: r });
+      });
+
+      Object.values(groups).forEach(list => {
+        list.sort((a, b) => getReqTime(b.data) - getReqTime(a.data));
+        const keep = list[0]?.id;
+        list.slice(1).forEach(item => {
+          // Remove older pending
+          db.ref(`${path}/${item.id}`).remove().catch(()=>{});
+          delete map[item.id];
+        });
+        // Ensure map keeps the one we decided
+        if (keep) {
+          // nothing additional
+        }
+      });
+    }
+
+    // Ensure only latest pending exists for this uid after a new add
+    function ensureOnlyLatestPending(kind, newId, newData) {
+      if (!newData || !newData.uid) return;
+      if (String(newData.status) !== 'pending') return;
+
+      const isWithdraw = kind === 'withdraw';
+      const map = isWithdraw ? withdrawMap : depositMap;
+      const path = isWithdraw ? 'withdrawRequests' : 'depositRequests';
+
+      const siblings = [];
+      Object.entries(map).forEach(([id, r]) => {
+        if (id === newId) return;
+        if (!r) return;
+        if (r.uid === newData.uid && String(r.status) === 'pending') {
+          siblings.push({ id, data: r });
+        }
+      });
+      if (!siblings.length) return;
+
+      const newTime = getReqTime(newData);
+      let keepNew = true;
+      siblings.forEach(s => {
+        if (getReqTime(s.data) > newTime) keepNew = false;
+      });
+
+      if (keepNew) {
+        // Remove all siblings (older pending)
+        siblings.forEach(s => {
+          db.ref(`${path}/${s.id}`).remove().catch(()=>{});
+          delete map[s.id];
+        });
+      } else {
+        // New one is older => remove new
+        db.ref(`${path}/${newId}`).remove().catch(()=>{});
+        delete map[newId];
+      }
     }
 
     // --- Withdraw Requests Table ---
-    function fetchWithdrawRequests(renderCb) {
-      db.ref('withdrawRequests').once('value').then(snap => {
-        let allRequests = {};
-        snap.forEach(reqSnap => {
-          const reqId = reqSnap.key;
-          const reqData = reqSnap.val();
-          allRequests[reqId] = reqData;
-        });
-        renderCb(allRequests);
-      });
-    }
-    function renderWithdrawRequests(requests) {
+    function renderWithdrawRequests() {
+      const rows = Object.entries(withdrawMap).map(([id, r]) => ({ id, ...r }));
+      rows.sort(byNewest); // newest first
+
       let html = `<table>
         <tr>
           <th>UID</th>
@@ -192,9 +372,9 @@
           <th>Mark Used</th>
           <th>Send Notification</th>
         </tr>`;
-      for(const reqId in requests) {
-        const r = requests[reqId];
-        let statusClass = r.status === 'approved' ? 'approved' 
+
+      rows.forEach(r => {
+        const statusClass = r.status === 'approved' ? 'approved'
                          : r.status === 'pending' ? 'pending'
                          : r.status === 'used' ? 'used'
                          : r.status === 'rejected' ? 'rejected'
@@ -205,79 +385,29 @@
           <td>${r.amount ? Number(r.amount).toFixed(2) : "0.00"}</td>
           <td>${r.binanceUID || "-"}</td>
           <td>${r.requestedAt ? new Date(r.requestedAt).toLocaleString() : "-"}</td>
-          <td class="${statusClass}">${r.status}</td>
+          <td class="${statusClass}">${r.status || '-'}</td>
           <td>
-            ${r.status === 'pending' ? `<button class="approve" onclick="approveWithdraw('${reqId}', this)">Approve</button>` : ''}
+            ${r.status === 'pending' ? `<button class="approve" onclick="approveWithdraw('${r.id}', this)">Approve</button>` : ''}
           </td>
           <td>
-            ${r.status !== 'used' ? `<button class="reset" onclick="markWithdrawUsed('${reqId}')">Used</button>` : ''}
+            ${r.status !== 'used' ? `<button class="reset" onclick="markWithdrawUsed('${r.id}')">Used</button>` : ''}
           </td>
           <td>
-            <input type="text" id="notif-msg-${reqId}" class="msg-input" placeholder="Type notification...">
-            <button class="msg-btn" onclick="sendNotificationToUser('${r.uid}', 'withdraw', '${reqId}')" title="Send">Send</button>
+            <input type="text" id="notif-msg-${r.id}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${r.uid}', 'withdraw', '${r.id}')" title="Send">Send</button>
           </td>
         </tr>`;
-      }
+      });
+
       html += `</table>`;
       document.getElementById('withdrawTable').innerHTML = html;
     }
 
-    // --- Withdraw Approve Logic: Balance Update (NO lossHistory update!) ---
-    window.approveWithdraw = async function(reqId, btn) {
-      if (btn) btn.disabled = true;
-      try {
-        const reqSnap = await db.ref('withdrawRequests/' + reqId).once('value');
-        const req = reqSnap.val();
-        if (!req || req.status !== "pending") throw new Error("Invalid request or already processed");
-        // ইউজার ডাটা
-        const userRef = db.ref('users/' + req.uid);
-        const userSnap = await userRef.once('value');
-        const userData = userSnap.val() || {};
-        const currBalance = Number(userData.balance || 0);
-        const amount = Number(req.amount || 0);
-        if (currBalance < amount) throw new Error("Insufficient user balance!");
-        const newBalance = Math.max(currBalance - amount, 0.01);
-
-        // Update user balance ONLY (no lossHistory update!)
-        await userRef.update({
-          balance: Number(newBalance.toFixed(2))
-        });
-
-        // Approve the withdraw request
-        await db.ref('withdrawRequests/' + reqId).update({
-          status: "approved",
-          approvedAt: Date.now()
-        });
-        alert("Withdraw approved & balance updated!");
-        fetchWithdrawRequests(renderWithdrawRequests);
-      } catch (err) {
-        alert("Error: " + err.message);
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    };
-
-    window.markWithdrawUsed = function(reqId) {
-      if (confirm("Mark this withdraw as USED?")) {
-        db.ref('withdrawRequests/' + reqId).update({ status: "used" })
-        .then(() => fetchWithdrawRequests(renderWithdrawRequests))
-        .catch(err => alert('Error: ' + err.message));
-      }
-    };
-
     // --- Deposit Requests Table ---
-    function fetchDepositRequests(renderCb) {
-      db.ref('depositRequests').once('value').then(snap => {
-        let allDeposits = {};
-        snap.forEach(depSnap => {
-          const depId = depSnap.key;
-          const depData = depSnap.val();
-          allDeposits[depId] = depData;
-        });
-        renderCb(allDeposits);
-      });
-    }
-    function renderDepositRequests(deposits) {
+    function renderDepositRequests() {
+      const rows = Object.entries(depositMap).map(([id, r]) => ({ id, ...r }));
+      rows.sort(byNewest); // newest first
+
       let html = `<table>
         <tr>
           <th>UID</th>
@@ -290,9 +420,9 @@
           <th>Reject</th>
           <th>Send Notification</th>
         </tr>`;
-      for(const depId in deposits) {
-        const d = deposits[depId];
-        let statusClass = d.status === 'approved' ? 'approved' 
+
+      rows.forEach(d => {
+        const statusClass = d.status === 'approved' ? 'approved'
                          : d.status === 'pending' ? 'pending'
                          : d.status === 'rejected' ? 'rejected'
                          : '';
@@ -302,22 +432,62 @@
           <td>${d.amount ? Number(d.amount).toFixed(2) : "0.00"}</td>
           <td>${d.orderId || "-"}</td>
           <td>${d.requestedAt ? new Date(d.requestedAt).toLocaleString() : "-"}</td>
-          <td class="${statusClass}">${d.status}</td>
+          <td class="${statusClass}">${d.status || '-'}</td>
           <td>
-            ${d.status === 'pending' ? `<button class="approve" onclick="approveDeposit('${depId}', this)">Approve</button>` : ''}
+            ${d.status === 'pending' ? `<button class="approve" onclick="approveDeposit('${d.id}', this)">Approve</button>` : ''}
           </td>
           <td>
-            ${d.status === 'pending' ? `<button class="reset" onclick="rejectDeposit('${depId}')">Reject</button>` : ''}
+            ${d.status === 'pending' ? `<button class="reset" onclick="rejectDeposit('${d.id}')">Reject</button>` : ''}
           </td>
           <td>
-            <input type="text" id="dep-notif-msg-${depId}" class="msg-input" placeholder="Type notification...">
-            <button class="msg-btn" onclick="sendNotificationToUser('${d.uid}', 'deposit', '${depId}')" title="Send">Send</button>
+            <input type="text" id="dep-notif-msg-${d.id}" class="msg-input" placeholder="Type notification...">
+            <button class="msg-btn" onclick="sendNotificationToUser('${d.uid}', 'deposit', '${d.id}')" title="Send">Send</button>
           </td>
         </tr>`;
-      }
+      });
+
       html += `</table>`;
       document.getElementById('depositTable').innerHTML = html;
     }
+
+    // --- Withdraw Approve Logic: Balance Update (NO lossHistory update!) ---
+    window.approveWithdraw = async function(reqId, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const reqSnap = await db.ref('withdrawRequests/' + reqId).once('value');
+        const req = reqSnap.val();
+        if (!req || req.status !== "pending") throw new Error("Invalid request or already processed");
+
+        const userRef = db.ref('users/' + req.uid);
+        const userSnap = await userRef.once('value');
+        const userData = userSnap.val() || {};
+        const currBalance = Number(userData.balance || 0);
+        const amount = Number(req.amount || 0);
+        if (currBalance < amount) throw new Error("Insufficient user balance!");
+        const newBalance = Math.max(currBalance - amount, 0.01);
+
+        await userRef.update({ balance: Number(newBalance.toFixed(2)) });
+
+        await db.ref('withdrawRequests/' + reqId).update({
+          status: "approved",
+          approvedAt: Date.now()
+        });
+        alert("Withdraw approved & balance updated!");
+        // Real-time listeners will re-render
+      } catch (err) {
+        alert("Error: " + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+
+    window.markWithdrawUsed = function(reqId) {
+      if (confirm("Mark this withdraw as USED?")) {
+        db.ref('withdrawRequests/' + reqId).update({ status: "used" })
+        .catch(err => alert('Error: ' + err.message));
+        // Real-time listeners will re-render
+      }
+    };
 
     // --- Deposit Approve Logic: Balance Update (NO winHistory update!) ---
     window.approveDeposit = async function(depId, btn) {
@@ -327,7 +497,6 @@
         const dep = depSnap.val();
         if (!dep || dep.status !== "pending") throw new Error("Invalid request or already processed");
 
-        // ইউজার ডাটা
         const userRef = db.ref('users/' + dep.uid);
         const userSnap = await userRef.once('value');
         const userData = userSnap.val() || {};
@@ -335,18 +504,14 @@
         const amount = Number(dep.amount || 0);
         const newBalance = Math.max(currBalance + amount, 0.01);
 
-        // Update user balance ONLY (don't touch winHistory!)
-        await userRef.update({
-          balance: Number(newBalance.toFixed(2))
-        });
+        await userRef.update({ balance: Number(newBalance.toFixed(2)) });
 
-        // Approve the deposit request
         await db.ref('depositRequests/' + depId).update({
           status: "approved",
           approvedAt: Date.now()
         });
         alert("Deposit approved & balance updated!");
-        fetchDepositRequests(renderDepositRequests);
+        // Real-time listeners will re-render
       } catch (err) {
         alert("Error: " + err.message);
       } finally {
@@ -357,38 +522,34 @@
     window.rejectDeposit = function(depId) {
       if (confirm("Reject this deposit request?")) {
         db.ref('depositRequests/' + depId).update({ status: "rejected" })
-        .then(() => fetchDepositRequests(renderDepositRequests))
         .catch(err => alert('Error: ' + err.message));
+        // Real-time listeners will re-render
       }
     };
 
     // --- FCM USERS NOTIFICATION PANEL --- //
-    function loadFcmUsers() {
-      db.ref('users').once('value').then(snap => {
-        let rows = '';
-        let users = snap.val() || {};
-        fcmUsers = {};
-        for(const uid in users) {
-          const user = users[uid];
-          if(user.fcmToken) {
-            // Cache user for send-to-all
-            fcmUsers[uid] = { ...user, uid };
-            rows += `
-              <tr>
-                <td>${uid}</td>
-                <td>${user.playerName || user.displayName || '-'}</td>
-                <td>${user.email || '-'}</td>
-                <td style="max-width:110px;overflow-x:auto;">${user.fcmToken.slice(0,18)}...<span title="Copy" style="cursor:pointer;color:#1976d2;" onclick="copyFcmToken('${user.fcmToken}')">📋</span></td>
-                <td>
-                  <input type="text" class="msg-input" id="notif-msg-user-${uid}" placeholder="Message...">
-                  <button class="msg-btn" onclick="sendPersonalNotif('${uid}')">Send</button>
-                </td>
-              </tr>
-            `;
-          }
+    function renderFcmUsers(users) {
+      let rows = '';
+      fcmUsers = {};
+      for(const uid in users || {}) {
+        const user = users[uid];
+        if(user && user.fcmToken) {
+          fcmUsers[uid] = { ...user, uid };
+          rows += `
+            <tr>
+              <td>${uid}</td>
+              <td>${user.playerName || user.displayName || '-'}</td>
+              <td>${user.email || '-'}</td>
+              <td style="max-width:110px;overflow-x:auto;">${String(user.fcmToken).slice(0,18)}...<span title="Copy" style="cursor:pointer;color:#1976d2;" onclick="copyFcmToken('${user.fcmToken}')">📋</span></td>
+              <td>
+                <input type="text" class="msg-input" id="notif-msg-user-${uid}" placeholder="Message...">
+                <button class="msg-btn" onclick="sendPersonalNotif('${uid}')">Send</button>
+              </td>
+            </tr>
+          `;
         }
-        document.getElementById('notifUserTbody').innerHTML = rows || `<tr><td colspan=5 style="text-align:center;color:#d32f2f;">No FCM-enabled users found.</td></tr>`;
-      });
+      }
+      document.getElementById('notifUserTbody').innerHTML = rows || `<tr><td colspan="5" style="text-align:center;color:#d32f2f;">No FCM-enabled users found.</td></tr>`;
     }
 
     // Copy token helper
@@ -409,10 +570,11 @@
     document.getElementById('sendToAllBtn').onclick = async function() {
       const msg = document.getElementById('notif-all-msg').value.trim();
       if(!msg) return alert("Enter a message!");
-      if(!Object.keys(fcmUsers).length) return alert("No FCM-enabled users.");
+      const keys = Object.keys(fcmUsers || {});
+      if(!keys.length) return alert("No FCM-enabled users.");
       if(!confirm("Send this message to all FCM-enabled users?")) return;
       let errors = 0, sent = 0;
-      for(const uid in fcmUsers) {
+      for(const uid of keys) {
         const token = fcmUsers[uid].fcmToken;
         try {
           await sendFcmMsg(token, msg, true);
@@ -431,10 +593,10 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ token, msg })
       });
-      const data = await res.json();
+      const data = await res.json().catch(()=>({success:false,error:'Invalid response'}));
       if(!data.success) {
         if(!silent) alert("Failed to send: " + (data.error || "Unknown error"));
-        throw new Error(data.error);
+        throw new Error(data.error || 'send-failed');
       }
       if(!silent) alert("Notification sent!");
       return true;
@@ -449,18 +611,17 @@
         msg = document.getElementById(`notif-msg-${reqId}`)?.value?.trim();
       }
       if(!msg) return alert("Message required!");
-      // User DB থেকে FCM Token পড়ুন (assume one token per user)
       const snap = await db.ref('users/' + uid + '/fcmToken').once('value');
       const token = snap.val();
       if(!token) return alert("User has not enabled notifications");
       await sendFcmMsg(token, msg);
     };
 
-    // --- Dashboard (optional summary, can be customized or removed) ---
+    // --- Dashboard ---
     function renderDashboard(users) {
-      let totalUsers = Object.keys(users).length;
-      let totalBalance = Object.values(users).reduce((sum, u) => sum + Number(u.balance || 0), 0);
-      let html = `
+      const totalUsers = Object.keys(users || {}).length;
+      const totalBalance = Object.values(users || {}).reduce((sum, u) => sum + Number(u.balance || 0), 0);
+      const html = `
         <h3>Dashboard</h3>
         <div>মোট ইউজার: <b>${totalUsers}</b></div>
         <div>মোট ব্যালেন্স: <b>${totalBalance.toFixed(2)}</b></div>
